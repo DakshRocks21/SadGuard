@@ -5,7 +5,9 @@ import hashlib
 import os
 import dotenv
 import requests
-from utils import llm
+import base64
+import tempfile
+from utils import llm, checker, container
 from typing import Dict, Any, List
 from flask import Blueprint
 
@@ -92,17 +94,42 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
     files = requests.get(f'{pr_url}/files').json()
 
     # Get all the modified files and pass to an LLM for review
-    for file in files:
-        if file['status'] != 'modified': continue
+    # for file in files:
+    #     if file['status'] != 'modified': continue
 
-        filename = file['filename']
-        diff = file['patch']
-        review = llm.get_review(pr_title, pr_body, filename, diff)
+    #     filename = file['filename']
+    #     diff = file['patch']
+    #     review = llm.get_review(pr_title, pr_body, filename, diff)
 
-        formatted_review = f"# Review for `{filename}`\n{review}"
-        PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=formatted_review)
+    #     formatted_review = f"# Review for `{filename}`\n{review}"
+    #     PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=formatted_review)
 
     # Get all the added binary files and run each of them in a sandbox
+    for file in files:
+        if file['status'] != 'added': continue
+
+        # Obtain the contents of the file
+        encoded_contents = requests.get(file['contents_url']).json()['content']
+        file_contents = base64.b64decode(encoded_contents)
+
+        # Check if the file is an executable
+        if not checker.check_executable(file_contents): continue
+
+        # Run the file in a sandbox
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Write the file to a temporary directory
+            with open(f'{temp_dir}/file', 'wb') as f:
+                f.write(file_contents)
+
+            # Build the container
+            image_name = 'sandbox-container'
+            context_path = './sandbox/'
+            
+            container.build_container(image_name, context_path)
+            output = container.run_container(image_name, temp_dir)
+
+            formatted_output = f'# Sandbox Analysis\n{output}'
+            PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=formatted_output)
 
 
 # === MODULE INTERFACE ===

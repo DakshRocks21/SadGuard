@@ -3,3 +3,5 @@ PyGitHub
 requests
 python-dotenv
 google-generativeai
+docker
+python-magic
