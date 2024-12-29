@@ -4,6 +4,8 @@ import hmac
 import hashlib
 import os
 import dotenv
+import requests
+from webhook import llm
 from typing import Dict, Any, List
 from flask import Blueprint
 
@@ -71,15 +73,36 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
 
     Args:
         payload (Dict[str, Any]): The payload from the GitHub webhook.
-    # TODO: Implement this function to run things properly
     """
     
     
+    # Get PR variables
     repo_name = payload['repository']['full_name']
     pr_number = payload['pull_request']['number']
+    pr_url = payload['pull_request']['url']
+
+    # Get PR metadata
+    pr_title = payload['pull_request']['title']
+    pr_body = payload['pull_request']['body']
 
     # Post a comment using the utility function
-    PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment="👋 Thanks for your pull request!")
+    # PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment="👋 Thanks for your pull request!")
+    
+    # Obtain a list of files changed/added for further processing
+    files = requests.get(f'{pr_url}/files').json()
+
+    # Get all the modified files and pass to an LLM for review
+    for file in files:
+        if file['status'] != 'modified': continue
+
+        filename = file['filename']
+        diff = file['patch']
+        review = llm.get_review(pr_title, pr_body, filename, diff)
+
+        formatted_review = f"# Review for `{filename}`\n{review}"
+        PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=formatted_review)
+
+    # Get all the added binary files and run each in a sandbox
 
 
 # === MODULE INTERFACE ===
