@@ -5,7 +5,7 @@ import hashlib
 import os
 import dotenv
 import requests
-from webhook import llm
+from utils import llm
 from typing import Dict, Any, List
 from flask import Blueprint
 
@@ -102,7 +102,7 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
         formatted_review = f"# Review for `{filename}`\n{review}"
         PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=formatted_review)
 
-    # Get all the added binary files and run each in a sandbox
+    # Get all the added binary files and run each of them in a sandbox
 
 
 # === MODULE INTERFACE ===

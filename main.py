@@ -1,10 +1,9 @@
 from flask import Flask
-from webhook.webhook import PRUtils
+from utils.webhook import PRUtils
 import threading
-import os
 
 from flask import Flask
-from webhook.webhook import webhook_app  # Import the Blueprint
+from utils.webhook import webhook_app  # Import the Blueprint
 
 app = Flask(__name__)
 
