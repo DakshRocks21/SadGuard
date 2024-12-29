@@ -34,7 +34,7 @@ def webhook() -> Any:
     print(f"Received event {event}")
     print(payload)
 
-    if event == 'pull_request' and payload['action'] == 'opened':
+    if event == 'pull_request' and (payload['action'] == 'opened' or payload['action'] == 'synchronize'):
         handle_pull_request(payload)
 
     return jsonify({'message': 'Event received'}), 200
