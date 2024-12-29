@@ -15,7 +15,7 @@ python main.py
 
 ## Set up the webhook
 
-```
+```bash
 sudo apt update
 sudo apt install cloudflared
 
