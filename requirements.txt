@@ -2,5 +2,4 @@ Flask
 PyGitHub
 requests
 python-dotenv
-
-
+google-generativeai
