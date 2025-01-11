@@ -1,6 +1,7 @@
 # SadGuard
 
-> Improvement of [VulnGuard](https://github.com/DakshRocks21/VulnGuard)
+> Improvement of [VulnGuard](https://github.com/DakshRocks21/VulnGuard), 
+> VulnGuard supports LangChain, this uses sandboxes.
 
 An AI-powered, self-hosted GitHub bot designed to detect and mitigate supply chain attacks in pull requests.
 SadGuard combines intelligent code analysis with executable behavior monitoring to secure your software pipeline.
