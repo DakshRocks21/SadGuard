@@ -1,10 +1,11 @@
+
 from flask import Flask
+from utils.analysis import analysis_bp
 from utils.webhook import webhook_app
-import threading
 
 app = Flask(__name__)
-
 app.register_blueprint(webhook_app, url_prefix='/webhook')
+app.register_blueprint(analysis_bp, url_prefix='/api')
 
 @app.route('/', methods=['GET'])
 def status():
@@ -15,8 +16,9 @@ def run_webhook():
 
 run_webhook()
 
-if __name__ == '__main__':
-    print("Starting Main Boss App...")
-    webhook_thread = threading.Thread(target=run_webhook, daemon=True)
-    webhook_thread.start()
-    print("Main Boss App started!")
+# import threading
+# if __name__ == '__main__':
+#     print("Starting Main Boss App...")
+#     webhook_thread = threading.Thread(target=run_webhook, daemon=True)
+#     webhook_thread.start()
+#     print("Main Boss App started!")

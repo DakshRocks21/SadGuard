@@ -1,0 +1,6 @@
+TODO
+
+- Remove dependency on data.json in server 2 (backend) for the lookup of the repo names
+- Instead of data.json, use a database to store the repo data
+- Block users from accessing other pages if they are not logged in
+- Clean website UI

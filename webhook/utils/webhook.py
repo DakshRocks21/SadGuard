@@ -15,7 +15,7 @@ from utils import container, checker, llm
 
 dotenv.load_dotenv()
 
-DB_FILE = r"~/data.json"
+DB_FILE = r"data.json"
 
 webhook_app = Blueprint('webhook', __name__)
 
@@ -96,6 +96,10 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
     pr_title = payload['pull_request']['title']
     pr_body = payload['pull_request']['body']
 
+    PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment="Thanks for the pull request! 🎉")
+    update_db(repo_name, "llm_review", pr_number, {"filename": "xyz.py", "review": "Thanks for the pull request! 🎉"})
+    update_db(repo_name, "llm_review", pr_number, {"filename": "xyz.py", "review": "Thanks for the pull request2! 🎉"})
+
     # You can include an LLM review for modified files here.
     # files = requests.get(f'{pr_url}/files').json()
     # for file in files:
@@ -156,7 +160,7 @@ def webhook() -> Any:
     event = request.headers.get('X-GitHub-Event')
     payload = request.json
     print(f"Received event {event}")
-    print(payload)
+    #print(payload)
 
     if event == 'pull_request' and payload['action'] in ['opened', 'synchronize']:
         handle_pull_request(payload)

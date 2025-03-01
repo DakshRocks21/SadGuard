@@ -5,8 +5,7 @@ import json
 
 repos_bp = Blueprint('repos', __name__)
 
-# Path to the JSON database file that server 1 writes to.
-DB_FILE = r"C:/Users/dthap/data.json"
+DB_FILE = r"data.json"
 
 def load_db() -> dict:
     """Load the JSON database from the file."""
@@ -21,12 +20,10 @@ def load_db() -> dict:
 
 @repos_bp.route('/repos', methods=['GET'])
 def get_repos():
-    # Retrieve the OAuth token from the session.
     access_token = session.get('access_token')
     if not access_token:
         abort(401, "Not authenticated")
-    
-    # Authenticate with PyGithub using the OAuth token.
+
     auth = Auth.Token(access_token)
     g = Github(auth=auth)
     
@@ -41,7 +38,7 @@ def get_repos():
                 repo_info = {
                     "full_name": repo.full_name,
                     "html_url": repo.html_url,
-                    "bot_data": bot_repos[repo.full_name]  # e.g., PR events and other details
+                    "bot_data": bot_repos[repo.full_name]  
                 }
                 installed_repos.append(repo_info)
     except Exception as e:
