@@ -1,6 +1,16 @@
 TODO
 
-- Remove dependency on data.json in server 2 (backend) for the lookup of the repo names
-- Instead of data.json, use a database to store the repo data
+Webhook
+Dockerfile in .sadguard folder to build test env
+Analyse network connections in test env for malicious behaviour
+Dump these into LLM for processing using some context from the repo.
+
+Website:
+
+- Remove backend/
+
+  - Use the frontend to fetch the data from the github directly (github oauth)
+
+- replace with db - Remove dependency on data.json in server 2 (backend) for the lookup of the repo names
 - Block users from accessing other pages if they are not logged in
 - Clean website UI
