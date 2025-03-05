@@ -61,10 +61,27 @@ vulnerabilities that can have widespread consequences.
 
 3. Install dependencies and run SadGuard
 
+    database
+    ```bash
+    docker-compose up --build
+    ```
+    
+    frontend
+
+    ```bash
+    cd frontend
+    npm i
+    npm run dev
+    ```
+
+    backend
+
     ```bash
     python -m venv venv
     source venv/bin/activate
+    cd backend
     pip install -r requirements.txt
+    pip install pymysql
     python main.py
     ```
 
