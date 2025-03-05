@@ -1,0 +1,33 @@
+version: '3.8'
+services:
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #   ports:
+  #     - "5173:5173"
+  #   links:
+  #   - backend
+  # backend:
+  #   build:
+  #     context: ./backend
+  #   ports:
+  #     - "8000:8000"
+  #   links:
+  #     - hmmdb
+  #   depends_on:
+  #     jobstopdb:
+  #       condition: service_healthy
+  saddb:
+    image: mysql:5.7
+    ports:
+      - "3313:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: sad
+      MYSQL_USER: sad
+      MYSQL_PASSWORD: password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "--password=password", "--user=sad", "status"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
