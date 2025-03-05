@@ -5,7 +5,7 @@ import json
 
 repos_bp = Blueprint('repos', __name__)
 
-DB_FILE = r"data.json"
+DB_FILE = r"C:\Users\joel_\Documents\GitHub\SadGuard\backend\routes\data.json"
 
 def load_db() -> dict:
     """Load the JSON database from the file."""
@@ -31,7 +31,9 @@ def get_repos():
     try:
         user = g.get_user()
         db_data = load_db()
+        print(db_data)
         bot_repos = db_data.get("repos", {}) 
+        print(bot_repos)
 
         for repo in user.get_repos():
             if repo.full_name in bot_repos:

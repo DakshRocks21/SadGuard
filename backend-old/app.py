@@ -1,6 +1,6 @@
 import os
 import dotenv
-dotenv.load_dotenv(".env")
+dotenv.load_dotenv("../.env")
 
 from flask import Flask
 from flask_cors import CORS
