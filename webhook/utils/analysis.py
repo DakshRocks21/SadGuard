@@ -1,138 +1,102 @@
-# analysis.py (server 1)
-from flask import Blueprint, request, jsonify, abort
-import os
-import tempfile
-import base64
-from datetime import datetime
-from utils import container, checker 
-import requests
-import json
+import re
 
-analysis_bp = Blueprint('analysis', __name__)
-
-@analysis_bp.route('/trigger-analysis', methods=['POST'])
-def trigger_analysis():
+def extract_section(logs: str, section_title: str) -> str:
     """
-    Trigger a code analysis on server 1.
-
-    Expected JSON payload:
-      {
-          "repo_name": "owner/repo",
-          "pr_number": <number>,
-          "file_url": "<url for file contents>"
-      }
-    """
-    data = request.get_json()
-    if not data:
-        abort(400, "Invalid JSON payload")
+    Extracts the content after a markdown header with the given title, up until the next header or end-of-file.
+    Expected log format example:
     
-    repo_name = data.get('repo_name')
-    pr_number = data.get('pr_number')
-    file_url = data.get('file_url')
-
-    if not (repo_name and pr_number and file_url):
-        abort(400, "Missing required parameters")
-
-    try:
-        response = requests.get(file_url)
-        if response.status_code != 200:
-            abort(400, "Could not fetch file contents")
-        file_info = response.json()
-        encoded_contents = file_info.get('content')
-        if not encoded_contents:
-            abort(400, "No content found in file response")
-        file_contents = base64.b64decode(encoded_contents)
-
-        if not checker.check_executable(file_contents):
-            return jsonify({"message": "File is not executable; skipping analysis"}), 200
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            file_path = os.path.join(temp_dir, "analyzed_file")
-            with open(file_path, 'wb') as f:
-                f.write(file_contents)
-
-            # Build or ensure the container is ready.
-            image_name = 'sandbox-container'
-            context_path = './sandbox/'
-            container.build_container(image_name, context_path)
-            output = container.run_container(image_name, temp_dir)
-
-
-        analysis_event = {
-            "repo_name": repo_name,
-            "pr_number": pr_number,
-            "sandbox_output": output,
-            "timestamp": datetime.utcnow().isoformat() + "Z"
-        }
-
-        return jsonify({"message": "Analysis completed", "analysis_result": output})
-    except Exception as e:
-        abort(500, f"Error during analysis: {str(e)}")
-        
-DB_FILE = r"data.json"
-
-def load_db() -> dict:
-    """Load the JSON database from the file."""
-    if not os.path.exists(DB_FILE):
-        return {}
-    with open(DB_FILE, "r") as f:
-        try:
-            data = json.load(f)
-        except json.JSONDecodeError:
-            data = {}
-    return data
-
-@analysis_bp.route('/sandbox-output', methods=['GET'])
-def get_sandbox_output():
-    """
-    Retrieve sandbox analysis output for a repository and PR.
-    Expected query parameters:
-      - repo_name: full name of the repository (e.g., "owner/repo")
-      - pr_number: pull request number
-    """
-    repo_name = request.args.get('repo_name')
-    pr_number = request.args.get('pr_number')
+    ## Mitmproxy Log (HTTP/HTTPS flows)
+    <content to extract>
+    ## Tcpdump Log (All network traffic)
     
-    if not repo_name or not pr_number:
-        abort(400, "Missing required parameters: repo_name and pr_number")
-
-    try:
-        data = load_db()
-        repo_data = data.get("repos", {}).get(repo_name, {})
-        print(repo_data)
-        pr_events = repo_data.get("pr_events", [])
-
-        sandbox_events = [
-            event for event in pr_events 
-            if event.get("event") == "sandbox_analysis" and str(event.get("pr_number")) == pr_number
-        ]
-        return jsonify(sandbox_events)
-    except Exception as e:
-        abort(500, f"Error retrieving sandbox output: {str(e)}")
-        
-@analysis_bp.route('/llm-review-output', methods=['GET'])
-def get_llm_review_output():
+    Returns:
+        str: The extracted content, or an empty string if the section was not found.
     """
-    Retrieve LLM review output for a repository and pull request.
-    Expected query parameters:
-      - repo_name: full name of the repository (e.g., "owner/repo")
-      - pr_number: pull request number
-    """
-    repo_name = request.args.get('repo_name')
-    pr_number = request.args.get('pr_number')
-    
-    if not repo_name or not pr_number:
-        abort(400, "Missing required parameters: repo_name and pr_number")
+    # Match the header, optional whitespace, a newline, then capture until the next header line or end-of-string.
+    pattern = re.compile(rf"## {re.escape(section_title)}\s*\n(.*?)(?=\n## |\Z)", re.DOTALL)
+    match = pattern.search(logs)
+    if match:
+        return match.group(1).strip()
+    return ""
 
-    try:
-        data = load_db()
-        repo_data = data.get("repos", {}).get(repo_name, {})
-        pr_events = repo_data.get("pr_events", [])
+# logs = """
+# ## Code Output
+# ```
+# ============================= test session starts ==============================
+# platform linux -- Python 3.10.16, pytest-8.3.5, pluggy-1.5.0 -- /usr/local/bin/python3.10
+# cachedir: .pytest_cache
+# rootdir: /app
+# collecting ... collected 2 items
 
-        llm_review_events = [
-            event for event in pr_events 
-            if event.get("event") == "llm_review" and str(event.get("pr_number")) == pr_number
-        ]
-        return jsonify(llm_review_events)
-    except Exception as e:
-        abort(500, f"Error retrieving LLM review output: {str(e)}")
+# tests/test_app.py::test_create_note PASSED                               [ 50%]
+# tests/test_app.py::test_healthcheck PASSED                               [100%]
+
+# ============================== 2 passed in 5.31s ===============================
+# ```
+# ---
+# ## Code Error
+# ```
+# ```
+# ---
+# ## Mitmproxy Log (HTTP/HTTPS flows)
+# ```
+# [13:33:19.834] Transparent Proxy listening at *:8080.
+# ```
+# ---
+# ## Tcpdump Log (All network traffic)
+# ```
+# tcpdump: data link type LINUX_SLL2
+# tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+# listening on any, link-type LINUX_SLL2 (Linux cooked v2), snapshot length 262144 bytes
+# 13:33:19.578118 eth0  M   IP6 :: > ff02::16: HBH ICMP6, multicast listener report v2, 1 group record(s), length 28
+# 13:33:19.689406 eth0  Out ARP, Request who-has 172.17.0.1 tell 172.17.0.2, length 28
+# 13:33:19.689465 eth0  In  ARP, Reply 172.17.0.1 is-at 02:42:ea:4d:10:58, length 28
+# 13:33:19.689470 eth0  Out IP 172.17.0.2.42088 > 192.168.0.1.53: 11258+ A? attacker.com. (30)
+# 13:33:19.872136 eth0  M   IP6 :: > ff02::1:ffd4:b572: ICMP6, neighbor solicitation, who has fe80::fc8f:7fff:fed4:b572, length 32
+# 13:33:19.932645 eth0  In  IP 192.168.0.1.53 > 172.17.0.2.42088: 11258 1/0/0 A 209.196.146.115 (46)
+# 13:33:19.932853 eth0  Out IP 172.17.0.2.45778 > 209.196.146.115.31337: Flags [S], seq 3219741925, win 64240, options [mss 1460,sackOK,TS val 3449673290 ecr 0,nop,wscale 7], length 0
+# 13:33:20.248115 eth0  M   IP6 fe80::42:eaff:fe4d:1058 > ff02::16: HBH ICMP6, multicast listener report v2, 3 group record(s), length 68
+# 13:33:20.487735 eth0  M   IP 172.17.0.1.5353 > 224.0.0.251.5353: 0 PTR (QM)? _googlecast._tcp.local. (40)
+# 13:33:20.487936 eth0  M   IP 172.17.0.1.5353 > 224.0.0.251.5353: 0 PTR (QM)? _googlecast._tcp.local. (40)
+# 13:33:20.888276 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572 > ff02::16: HBH ICMP6, multicast listener report v2, 1 group record(s), length 28
+# 13:33:20.888290 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572 > ff02::2: ICMP6, router solicitation, length 16
+# 13:33:20.891161 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572 > ff02::16: HBH ICMP6, multicast listener report v2, 1 group record(s), length 28
+# 13:33:20.952074 eth0  Out IP 172.17.0.2.45778 > 209.196.146.115.31337: Flags [S], seq 3219741925, win 64240, options [mss 1460,sackOK,TS val 3449674310 ecr 0,nop,wscale 7], length 0
+# 13:33:20.989283 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0 [2q] PTR (QM)? _ipps._tcp.local. PTR (QM)? _ipp._tcp.local. (45)
+# 13:33:21.024133 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572 > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
+# 13:33:21.131342 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0 [2q] [2n] ANY (QM)? 2.7.5.b.4.d.e.f.f.f.f.7.f.8.c.f.0.0.0.0.0.0.0.0.0.0.0.0.0.8.e.f.ip6.arpa. ANY (QM)? linux.local. (149)
+# 13:33:21.152073 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572 > ff02::16: HBH ICMP6, multicast listener report v2, 1 group record(s), length 28
+# 13:33:21.382198 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0 [2q] [2n] ANY (QM)? 2.7.5.b.4.d.e.f.f.f.f.7.f.8.c.f.0.0.0.0.0.0.0.0.0.0.0.0.0.8.e.f.ip6.arpa. ANY (QM)? linux.local. (149)
+# 13:33:21.488385 eth0  M   IP 172.17.0.1.5353 > 224.0.0.251.5353: 0 PTR (QM)? _googlecast._tcp.local. (40)
+# 13:33:21.488590 eth0  M   IP 172.17.0.1.5353 > 224.0.0.251.5353: 0 PTR (QM)? _googlecast._tcp.local. (40)
+# 13:33:21.632953 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0 [2q] [2n] ANY (QM)? 2.7.5.b.4.d.e.f.f.f.f.7.f.8.c.f.0.0.0.0.0.0.0.0.0.0.0.0.0.8.e.f.ip6.arpa. ANY (QM)? linux.local. (149)
+# 13:33:21.833181 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0*- [0q] 2/0/0 (Cache flush) PTR linux.local., (Cache flush) AAAA fe80::fc8f:7fff:fed4:b572 (137)
+# 13:33:21.976069 eth0  Out IP 172.17.0.2.45778 > 209.196.146.115.31337: Flags [S], seq 3219741925, win 64240, options [mss 1460,sackOK,TS val 3449675334 ecr 0,nop,wscale 7], length 0
+# 13:33:21.990141 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0 [2q] PTR (QM)? _ipps._tcp.local. PTR (QM)? _ipp._tcp.local. (45)
+# 13:33:22.670695 eth0  B   IP 172.17.0.1.57621 > 172.17.255.255.57621: UDP, length 44
+# 13:33:22.892572 eth0  M   IP 172.17.0.1.43463 > 239.255.255.250.1900: UDP, length 168
+# 13:33:23.000071 eth0  Out IP 172.17.0.2.45778 > 209.196.146.115.31337: Flags [S], seq 3219741925, win 64240, options [mss 1460,sackOK,TS val 3449676358 ecr 0,nop,wscale 7], length 0
+# 13:33:23.028326 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0*- [0q] 2/0/0 (Cache flush) PTR linux.local., (Cache flush) AAAA fe80::fc8f:7fff:fed4:b572 (137)
+# 13:33:23.893859 eth0  M   IP 172.17.0.1.43463 > 239.255.255.250.1900: UDP, length 168
+# 13:33:23.992256 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0 [2q] PTR (QM)? _ipps._tcp.local. PTR (QM)? _ipp._tcp.local. (45)
+# 13:33:24.024078 eth0  Out IP 172.17.0.2.45778 > 209.196.146.115.31337: Flags [S], seq 3219741925, win 64240, options [mss 1460,sackOK,TS val 3449677382 ecr 0,nop,wscale 7], length 0
+# 13:33:24.728088 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572 > ff02::2: ICMP6, router solicitation, length 16
+# 13:33:24.895090 eth0  M   IP 172.17.0.1.43463 > 239.255.255.250.1900: UDP, length 168
+
+# 34 packets captured
+# 36 packets received by filter
+# 0 packets dropped by kernel
+# ```
+# ---
+# ## Network Difference (Initial vs Final)
+# ```
+
+# ```
+# ---
+# """
+
+# print(extract_section(logs, "Code Output"))
+# print(extract_section(logs, "Code Error"))
+# print(extract_section(logs, "Mitmproxy Log (HTTP/HTTPS flows)"))
+# print(extract_section(logs, "Tcpdump Log (All network traffic)"))
+# print(extract_section(logs, "Network Difference (Initial vs Final)"))

@@ -35,6 +35,9 @@ Do not output a title as it will be manually added in later.
 If vulnerabilities are found: provide a report of the code functionality, the detected vulnerabilities. 
 
 You are also given the pull request title and body, which usually contains context about the changes made.
+If you need more context, DO NOT ASK.
+
+DO NOT talk about the commit message or the author of the commit.
 
 ===== PULL REQUEST INFORMATION =====
 PR Title: {title}
@@ -42,6 +45,29 @@ PR Body: {body}
 
 ===== CODE DIFF FOR {filename} =====
 {diff}"""
+
+    response = model.generate_content(prompt)
+    return response.text
+
+def get_network_analysis_output(output:str) -> str:
+    """Analyzes the output of a network analysis script in a Docker container
+    
+    Returns:
+        str: The output of the network analysis script.
+    """
+    print("analyzing network output")
+    print("output:",output)
+    prompt = f"""===== PROMPT =====
+You are a NETWORK ANALYSIS expert. Analyze the output of the network analysis script to ensure it:
+- Performs as described: Verify the script matches the expected output.
+- Detects issues: Identify vulnerabilities, unintended behavior, or malicious actions, highlighting severity and providing recommendations.
+- Summarizes in markdown: Provide a markdown-formatted summary of the script functionality.
+- Highlights problems: Clearly explain any unintended or malicious actions and suggest fixes.
+
+If anything is missing or unclear, DO NOT ASK for more information. Instead, just say not enough information to analyze.
+
+===== NETWORK ANALYSIS OUTPUT =====
+{output}"""
 
     response = model.generate_content(prompt)
     return response.text
