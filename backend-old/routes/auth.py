@@ -6,7 +6,7 @@ auth_bp = Blueprint('auth', __name__)
 
 GITHUB_CLIENT_ID = os.environ['GITHUB_CLIENT_ID']
 GITHUB_CLIENT_SECRET = os.environ['GITHUB_CLIENT_SECRET']
-REDIRECT_URI = os.environ.get('GITHUB_REDIRECT_URI', 'http://localhost:5000/auth/github/callback')
+REDIRECT_URI = os.environ.get('GITHUB_REDIRECT_URI', 'http://localhost:5173/auth/github/callback')
 
 @auth_bp.route('/github/login')
 def github_login():

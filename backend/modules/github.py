@@ -31,16 +31,35 @@ def get_user(token: str) -> requests.Response:
     return r
 
 
-def get_repos(token: str) -> requests.Response:
-    r = requests.get(
-        "https://api.github.com/user/repos",
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {token}",
-        },
-    )
-    return r
+def get_repos(token: str) -> list:
+    repos = []
+    page = 1
+    while True:
+        r = requests.get(
+            f"https://api.github.com/user/repos?page={page}&per_page=100",
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+        )
+        print(r.status_code)
+        print(len(repos))
+        print(page)
+        if r.status_code != 200:
+            print(f"Failed to fetch repositories: {r.status_code}")
+            break
+
+        repos_on_page = r.json()
+        repos.extend(repos_on_page)
+
+        # If less than 100 repos are returned, we've reached the last page
+        if len(repos_on_page) < 100:
+            break
+        
+        page += 1
+
+    return repos
 
 
 def get_repos_branches(token: str, repos: list) -> requests.Response:
