@@ -14,7 +14,7 @@ from sqlmodel import select
 from typing import Annotated, Optional, List
 from routers import users, auth, webhooks
 from utils.common import hash_password, random_string
-from utils.db import Session, get_session, User, create_db_and_tables, Scan, SuspiciousFiles
+from utils.db import Session, get_session, User, create_db_and_tables, Scan, SuspiciousFiles,PREvent
 from utils.common import get_current_active_user
 from modules.github import *
 from werkzeug.utils import secure_filename
@@ -74,7 +74,7 @@ async def http_get_commits(
 ):
     r = get_commits(
         current_user.github_access_token,
-        current_user.username,
+        params.owner_name,
         params.repo,
         params.branch,
     )
@@ -218,6 +218,19 @@ async def http_get_pull_requests(
     if r.status_code != 200:
         raise HTTPException(status_code=r.status_code, detail="Failed to fetch PRs")
     return r.json()
+
+@app.post("/events", response_model=List[dict])
+async def http_get_events(
+    session: SessionDep,
+    current_user: Annotated[User, Depends(get_current_active_user)]
+):
+    # TODO: filter by repo
+    statement = select(PREvent).order_by(PREvent.timestamp.desc())
+    events = session.exec(statement).all()
+    events = [event.to_dict() for event in events]
+    
+    return events
+
 
 # get uplaoded file and text
 # @app.post("/sandbox")

@@ -53,7 +53,6 @@ def get_repos(token: str) -> list:
         repos_on_page = r.json()
         repos.extend(repos_on_page)
 
-        # If less than 100 repos are returned, we've reached the last page
         if len(repos_on_page) < 100:
             break
         
@@ -79,6 +78,7 @@ def get_repos_branches(token: str, repos: list) -> requests.Response:
 
 
 def get_commits(token: str, owner: str, repo: str, branch: str) -> requests.Response:
+    print(f"https://api.github.com/repos/{owner}/{repo}/commits")
     r = requests.get(
         f"https://api.github.com/repos/{owner}/{repo}/commits",
         headers={"Authorization": f"Bearer {token}"},
