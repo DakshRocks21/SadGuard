@@ -63,7 +63,7 @@ async def http_get_repos(
     current_user: Annotated[User, Depends(get_current_active_user)]
 ):
     r = get_repos(current_user.github_access_token)
-    repos = r.json()
+    repos = r
     repos = get_repos_branches(current_user.github_access_token, repos)
     return repos
 
