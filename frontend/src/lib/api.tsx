@@ -35,7 +35,6 @@ export async function getRepos() {
 
 export async function getCommits(repo: string, branch: string) {
     // use access_token cookie
-
     const response = await fetch(`${API_URL}/commits`, {
         headers: {
             Authorization: `Bearer ${getCookie("access_token")}`,
@@ -65,10 +64,30 @@ export async function getPullRequests(repo: string) {
     });
 
     if (response.ok) {
+        console.log(response.json());
         return response.json();
     } else {
         console.log(response);
         throw new Error("Failed to fetch pull requests");
+    }
+}
+
+export async function getEvents(repo: string) {
+    // use access_token cookie
+
+    const response = await fetch(`${API_URL}/events`, {
+        headers: {
+            Authorization: `Bearer ${getCookie("access_token")}`,
+            "Content-Type": "application/json",
+        },
+        method: "POST",
+        body: JSON.stringify({ repo }),
+    });
+
+    if (response.ok) {
+        return response.json();
+    } else {
+        throw new Error("Failed to fetch events");
     }
 }
 

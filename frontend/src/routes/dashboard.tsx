@@ -26,7 +26,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ModeToggle } from "@/components/mode-toggle";
-import { getCommits, getRepos, getUser, runScan, getPullRequests } from "@/lib/api";
+import { getCommits, getRepos, getUser, runScan, getPullRequests, getEvents } from "@/lib/api";
 
 export const Route = createFileRoute("/dashboard")({
   component: RouteComponent,
@@ -43,6 +43,10 @@ function RouteComponent() {
   const [commitsLoading, setCommitsLoading] = useState(false);
   const [prsLoading, setPrsLoading] = useState(false);
 
+  // New state for PR events
+  const [events, setEvents] = useState([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+
   useEffect(() => {
     async function fetchUser() {
       const data = await getUser();
@@ -52,6 +56,7 @@ function RouteComponent() {
 
     async function fetchRepos() {
       const data = await getRepos();
+      console.log(data);
       setRepos(data);
     }
     fetchRepos();
@@ -61,7 +66,21 @@ function RouteComponent() {
       bouncy.register();
     }
     getLoader();
+
   }, []);
+
+  // Fetch events from FastAPI backend
+  async function fetchEvents(repo) {
+    setEventsLoading(true);
+    try {
+      const data = await getEvents(repo);
+
+      setEvents(data);
+    } catch (error) {
+      console.error("Error fetching events:", error);
+    }
+    setEventsLoading(false);
+  }
 
   async function retrieveCommits(repo, branch) {
     setCommitsLoading(true);
@@ -95,6 +114,11 @@ function RouteComponent() {
       console.error("Error running scan for PR:", error);
     }
   }
+
+  // Filter events by selected repo if one is chosen
+  const filteredEvents = selectedRepo
+    ? events.filter((event) => event.repo_name === selectedRepo)
+    : events;
 
   return (
     <div className="flex">
@@ -131,6 +155,7 @@ function RouteComponent() {
                             setSelectedBranch(branch.name);
                             retrieveCommits(repo.name, branch.name);
                             loadPullRequests(repo.name);
+                            fetchEvents(repo.name);
                           }}
                         >
                           {branch.name}
@@ -152,8 +177,52 @@ function RouteComponent() {
         </div>
       </div>
 
-      {/* Main Content Area: PRs & Commits */}
+      {/* Main Content Area: Events, PRs & Commits */}
       <div className="bg-slate-100 dark:bg-zinc-950 flex-grow h-screen p-4 overflow-y-auto">
+        {/* New: PR Events Section */}
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold dark:text-white mb-2">
+            Pull Request Events {selectedRepo && `for ${selectedRepo}`}
+          </h2>
+          {eventsLoading ? (
+            <div className="flex justify-center items-center h-32">
+              <l-bouncy size="30" speed="1.75" color="#595cff" />
+            </div>
+          ) : (
+            <Table className="w-full border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+              <TableCaption className="text-lg font-semibold text-gray-600 dark:text-gray-300">
+                PR Events
+              </TableCaption>
+              <TableHeader className="bg-gray-200 dark:bg-gray-800">
+                <TableRow>
+                  <TableHead className="p-4 font-semibold">Repo</TableHead>
+                  <TableHead className="p-4 font-semibold">Event</TableHead>
+                  <TableHead className="p-4 font-semibold">PR Number</TableHead>
+                  <TableHead className="p-4 font-semibold">Extra</TableHead>
+                  <TableHead className="p-4 font-semibold">Timestamp</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody className="dark:text-white">
+                {filteredEvents.map((event) => (
+                  <TableRow key={event.id} className="hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-200">
+                    <TableCell className="p-4 border-b border-gray-200 dark:border-gray-700">{event.repo_name}</TableCell>
+                    <TableCell className="p-4 border-b border-gray-200 dark:border-gray-700">{event.event}</TableCell>
+                    <TableCell className="p-4 border-b border-gray-200 dark:border-gray-700">{event.pr_number}</TableCell>
+                    <TableCell className="p-4 border-b border-gray-200 dark:border-gray-700">
+                      <pre className="whitespace-pre-wrap text-xs">
+                        {JSON.stringify(event.extra, null, 2)}
+                      </pre>
+                    </TableCell>
+                    <TableCell className="p-4 border-b border-gray-200 dark:border-gray-700">
+                      {new Date(event.timestamp).toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+
         {/* Pull Requests Table */}
         <div className="mb-8">
           <h2 className="text-xl font-semibold dark:text-white mb-2">
@@ -212,7 +281,9 @@ function RouteComponent() {
               </TableCaption>
               <TableHeader className="bg-gray-200 dark:bg-gray-800">
                 <TableRow>
-                  <TableHead className="w-[200px] p-4 font-semibold">Commit Message</TableHead>
+                  <TableHead className="w-[200px] p-4 font-semibold">
+                    Commit Message
+                  </TableHead>
                   <TableHead className="p-4 font-semibold">Author</TableHead>
                   <TableHead className="p-4 font-semibold">Date</TableHead>
                   <TableHead className="p-4 font-semibold">Suspicious Files</TableHead>
