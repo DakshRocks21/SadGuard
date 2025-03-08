@@ -25,10 +25,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-
 // import Image from "next/image";
 // import { API_URL } from "@/lib/utils";
-import { getCommits, getRepos, getUser, runScan } from "@/lib/api";
+import { getCommits, getRepos, getUser, runScan, getPullRequests } from "@/lib/api";
 import { ModeToggle } from "@/components/mode-toggle";
 
 export const Route = createFileRoute("/dashboard")({
@@ -42,6 +41,7 @@ function RouteComponent() {
   const [selectedBranch, setSelectedBranch] = useState("");
   const [commits, setCommits] = useState([]);
   const [scans, setScans] = useState([]);
+  const [pullRequests, setPullRequests] = useState([]);
   const [tableLoading, setTableLoading] = useState(true);
 
   useEffect(() => {
@@ -73,6 +73,17 @@ function RouteComponent() {
     fetchCommits();
   }
 
+  async function retrievePullRequests(repo) {
+
+    try {
+      const data = await getPullRequests(repo);
+      console.log(data);
+      setPullRequests(data);
+    } catch (error) {
+      console.error("Error fetching pull requests:", error);
+    }
+  }
+
   return (
     <div className="flex">
       {/* nav bar */}
@@ -99,7 +110,7 @@ function RouteComponent() {
             >
               {repos.map((repo) => {
                 return (
-                  <AccordionItem value={repo.name}>
+                  <AccordionItem value={repo.name} key={repo.name}>
                     <AccordionTrigger className="dark:text-white">
                       {repo.name}
                     </AccordionTrigger>
@@ -108,11 +119,13 @@ function RouteComponent() {
                         {repo.branches.map((branch) => {
                           return (
                             <Button
+                              key={branch.name}
                               className="w-full px-2 text-left overflow-ellipsis whitespace-nowrap bg-slate-200 dark:bg-zinc-800 text-black dark:text-white hover:text-white hover:bg-slate-500 dark:hover:bg-zinc-900"
                               onClick={() => {
                                 setSelectedRepo(repo.name);
                                 setSelectedBranch(branch.name);
                                 retrieveCommits(repo.name, branch.name);
+                                retrievePullRequests(repo.name);
                               }}
                             >
                               {branch.name}
@@ -143,81 +156,20 @@ function RouteComponent() {
           </div>
         ) : (
           <Table className="w-full h-96 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
-            <TableCaption className="text-lg font-semibold text-gray-600 dark:text-gray-300">Commits</TableCaption>
+            <TableCaption className="text-lg font-semibold text-gray-600 dark:text-gray-300">Pull Requests</TableCaption>
             <TableHeader className="bg-gray-200 dark:bg-gray-800">
               <TableRow className="w-full">
-                <TableHead className="w-[100px] text-left p-4 font-semibold">Commit</TableHead>
+                <TableHead className="text-left p-4 font-semibold">Title</TableHead>
                 <TableHead className="text-left p-4 font-semibold">Author</TableHead>
-                <TableHead className="text-left p-4 font-semibold">Date</TableHead>
-                <TableHead className="text-left p-4 font-semibold">Suspicious Files</TableHead>
-                <TableHead className="text-left p-4 font-semibold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody className="dark:text-white">
-              {commits.map((commit) => {
-                return (
-                  <TableRow 
-                    key={commit.sha} 
-                    className="hover:bg-gray-100 dark:hover:bg-gray-700 transition duration-200"
-                  >                    
-                    <TableCell className="p-4 border-b border-gray-200 dark:border-gray-700">{commit.commit.message}</TableCell>
-                    <TableCell className="p-4 border-b border-gray-200 dark:border-gray-700">{commit.commit.author.name}</TableCell>
-                    <TableCell className="p-4 border-b border-gray-200 dark:border-gray-700">{commit.commit.author.date}</TableCell>
-                    <TableCell className="p-4 border-b border-gray-200 dark:border-gray-700">
-                      {scans[commit.sha]
-                        ? Object.keys(scans[commit.sha]).length
-                        : "Run scan...."}
-                    </TableCell>
-                    <TableCell className="p-4 border-b border-gray-200 dark:border-gray-700">
-                      {scans[commit.sha] ? (
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="secondary">View</Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>
-                                Suspicious Files in Commit {commit.sha}
-                              </DialogTitle>
-                              <DialogDescription>
-                                <Table>
-                                  <TableHeader className="bg-gray-200 dark:bg-gray-800">
-                                    <TableRow>
-                                      <TableHead className="p-2 font-semibold">File</TableHead>
-                                      <TableHead className="p-2 font-semibold">Reason</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {scans[commit.sha].map((file) => {
-                                      return (
-                                        <TableRow key={index} className="p-2 border-b border-gray-200 dark:border-gray-700">
-                                          <TableCell className="p-2 border-b border-gray-200 dark:border-gray-700">
-                                            {Object.keys(file)[0]}
-                                          </TableCell>
-                                          <TableCell className="p-2 border-b border-gray-200 dark:border-gray-700">
-                                            {file[Object.keys(file)[0]]}
-                                          </TableCell>
-                                        </TableRow>
-                                      );
-                                    })}
-                                  </TableBody>
-                                </Table>
-                              </DialogDescription>
-                            </DialogHeader>
-                          </DialogContent>
-                        </Dialog>
-                      ) : (
-                        <Button
-                          variant="secondary"
-                          onClick={() => runScan(selectedRepo, commit.sha)}
-                        >
-                          Scan
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+              {pullRequests.map((pr) => (
+                <TableRow key={pr.id}>
+                  <TableCell className="p-4 border-b border-gray-200 dark:border-gray-700">{pr.title}</TableCell>
+                  <TableCell className="p-4 border-b border-gray-200 dark:border-gray-700">{pr.user.login}</TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         )}

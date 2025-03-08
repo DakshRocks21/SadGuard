@@ -205,6 +205,19 @@ async def scan_commit(
         session.commit()
     return output_list
 
+from pydantic import BaseModel
+
+class RepoRequest(BaseModel):
+    repo: str
+
+@app.post("/pulls")
+async def http_get_pull_requests(
+    request: RepoRequest, current_user: Annotated[User, Depends(get_current_active_user)]
+):
+    r = get_pull_requests(current_user.github_access_token, current_user.username, request.repo)
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail="Failed to fetch PRs")
+    return r.json()
 
 # get uplaoded file and text
 # @app.post("/sandbox")

@@ -93,3 +93,10 @@ def get_commit(token: str, owner: str, repo: str, sha: str) -> requests.Response
         headers={"Authorization": f"Bearer {token}"},
     )
     return r
+
+def get_pull_requests(token: str, owner: str, repo: str) -> requests.Response:
+    r = requests.get(
+        f"https://api.github.com/repos/{owner}/{repo}/pulls",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    return r
