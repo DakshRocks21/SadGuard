@@ -1,12 +1,12 @@
 import requests
 import dotenv
 import os
-dotenv.load_dotenv("../.env")
+dotenv.load_dotenv("../../.env")
 
-GITHUB_APP_CLIENT_ID = os.environ['GITHUB_CLIENT_ID']
-GITHUB_APP_CLIENT_SECRET = os.environ['GITHUB_CLIENT_SECRET']
 
 def login_oauth(code: str) -> requests.Response:
+    GITHUB_APP_CLIENT_ID = os.environ['GITHUB_CLIENT_ID']
+    GITHUB_APP_CLIENT_SECRET = os.environ['GITHUB_CLIENT_SECRET']
     r = requests.post(
         "https://github.com/login/oauth/access_token",
         data={
