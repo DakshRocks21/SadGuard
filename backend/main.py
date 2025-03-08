@@ -207,32 +207,32 @@ async def scan_commit(
 
 
 # get uplaoded file and text
-@app.post("/sandbox")
-async def sandbox_test(file: UploadFile = File(None), script: str = Form(None)):
-    # make mount_point folder
-    import os
-    os.makedirs("mount_point", exist_ok=True)
-    # make random folder
-    random_folder = random_string(10)
-    os.makedirs(f"mount_point/{random_folder}", exist_ok=True)
-    # save file
-    if file:
-        filename = secure_filename(file.filename)
-        file_path = f"mount_point/{random_folder}/{filename}"
-        with open(file_path, "wb") as f:
-            f.write(file.file.read())
-    # save script
-    if script:
-        # convert to lf
-        script = script.replace("\r\n", "\n")
-        with open(f"mount_point/{random_folder}/run.sh", "w") as f:
-            f.write(script)
-    # build container
-    image_name = "sandbox-container"
-    context_path = "./sandbox/benchmarker/"
-    build_container(image_name, context_path)
-    output = run_container(image_name=image_name, volume_mount=f"mount_point/{random_folder}")
-    return {"status": "success", "output": output}
+# @app.post("/sandbox")
+# async def sandbox_test(file: UploadFile = File(None), script: str = Form(None)):
+#     # make mount_point folder
+#     import os
+#     os.makedirs("mount_point", exist_ok=True)
+#     # make random folder
+#     random_folder = random_string(10)
+#     os.makedirs(f"mount_point/{random_folder}", exist_ok=True)
+#     # save file
+#     if file:
+#         filename = secure_filename(file.filename)
+#         file_path = f"mount_point/{random_folder}/{filename}"
+#         with open(file_path, "wb") as f:
+#             f.write(file.file.read())
+#     # save script
+#     if script:
+#         # convert to lf
+#         script = script.replace("\r\n", "\n")
+#         with open(f"mount_point/{random_folder}/run.sh", "w") as f:
+#             f.write(script)
+#     # build container
+#     image_name = "sandbox-container"
+#     context_path = "./sandbox/benchmarker/"
+#     build_container(image_name, context_path)
+#     output = run_container(image_name=image_name, volume_mount=f"mount_point/{random_folder}")
+#     return {"status": "success", "output": output}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=80, reload=True)
