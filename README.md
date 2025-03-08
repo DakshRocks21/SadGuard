@@ -53,10 +53,18 @@ vulnerabilities that can have widespread consequences.
     Create a `.env` file in the root directory with the following variables:
 
     ```bash
+    GITHUB_CLIENT_ID=
+    GITHUB_CLIENT_SECRET=
     GITHUB_APP_ID=<Obtained from creating a GitHub bot>
     GITHUB_PRIVATE_KEY_PATH=<File path to the .pem file from the Github bot>
     GITHUB_WEBHOOK_SECRET=<User-defined secret at the bots configuration page>
     GOOGLE_AI_STUDIO_KEY=<Refer to the LLM configuration section>
+    ```
+
+    Create a `.env` file in the frontend directory with the following variables:
+
+    ```bash
+    VITE_GITHUB_CLIENT_ID=<same as GITHUB_CLIENT_ID in root env>
     ```
 
 3. Install dependencies and run SadGuard
@@ -91,8 +99,7 @@ vulnerabilities that can have widespread consequences.
 # Callback URL
 http://localhost:5173/github/callback
 
-# Permissions requirede
-
+# Permissions required
 ```
 
 ## 3. Webhook Configuration

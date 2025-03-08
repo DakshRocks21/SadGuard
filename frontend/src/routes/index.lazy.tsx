@@ -18,7 +18,7 @@ export const Route = createLazyFileRoute("/")({
 
 function Index() {
   const handleLogin = () => {
-    window.location.href = "https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}"; // backend URL
+    window.location.href = `https://github.com/login/oauth/authorize?client_id=${import.meta.env.VITE_GITHUB_CLIENT_ID}`; // backend URL
   };
 
   return (
