@@ -79,3 +79,8 @@ class GetCommits(BaseModel):
 class GetCommit(BaseModel):
     sha: str
     repo: str
+
+
+class Pr(BaseModel):
+    id: str
+    commits_url: Optional[CommitInfo] = None
