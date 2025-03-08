@@ -85,7 +85,17 @@ vulnerabilities that can have widespread consequences.
     python main.py
     ```
 
-## 2. Webhook Configuration
+## 2. Github Bot Configuration
+
+```bash
+# Callback URL
+http://localhost:5173/github/callback
+
+# Permissions requirede
+
+```
+
+## 3. Webhook Configuration
 
 1. Install Cloudflare Tunnel:
 
@@ -107,7 +117,7 @@ vulnerabilities that can have widespread consequences.
 
 3. Provide the generated URL to the GitHub bot settings page under "Webhook URL"
 
-## 3. LLM Configuration
+## 4. LLM Configuration
 
 1. Obtain an API Key from Google AI Studio at [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey).
 2. Add the key to your `.env` file
