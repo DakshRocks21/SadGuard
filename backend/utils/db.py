@@ -19,7 +19,6 @@ class Scan(SQLModel, table=True):
     repo_name: str = Field()
     # branch_name: str = Field()
     commit_sha: str = Field()
-    pr_id: str = Field()
     scan_status: str = Field()
     scan_result: str | None = Field()
     last_scanned: str = Field()
