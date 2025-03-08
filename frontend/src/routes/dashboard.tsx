@@ -100,7 +100,7 @@ function RouteComponent() {
             <Accordion
               type="single"
               collapsible
-              className="max-h-[calc(100vh-8rem)] overflow-y-auto"
+              className="max-h-[calc(80vh-8rem)] overflow-y-auto"
             >
               {repos.map((repo) => {
                 return (
