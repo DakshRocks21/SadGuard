@@ -84,3 +84,7 @@ class GetCommit(BaseModel):
 class Pr(BaseModel):
     id: str
     commits_url: Optional[CommitInfo] = None
+
+
+class RepoRequest(BaseModel):
+    repo: str

@@ -25,6 +25,4 @@ async def read_users(session: SessionDep):
 async def read_users_me(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-    print("hi")
-    print(current_user)
     return current_user
