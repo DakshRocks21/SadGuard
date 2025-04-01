@@ -3,7 +3,7 @@ services:
     build:
       context: ./webhook
     ports:
-      - "8000:8000"
+      - "80:3001"
     depends_on:
       saddb:
         condition: service_healthy
