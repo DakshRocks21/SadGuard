@@ -43,9 +43,6 @@ def get_repos(token: str) -> list:
                 "Authorization": f"Bearer {token}",
             },
         )
-        print(r.status_code)
-        print(len(repos))
-        print(page)
         if r.status_code != 200:
             print(f"Failed to fetch repositories: {r.status_code}")
             break

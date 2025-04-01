@@ -73,7 +73,7 @@ async def http_get_commits(
 ):
     r = get_commits(
         current_user.github_access_token,
-        params.owner_name,
+        current_user.username,
         params.repo,
         params.branch,
     )

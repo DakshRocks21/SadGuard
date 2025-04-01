@@ -1,22 +1,12 @@
-version: '3.8'
 services:
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #   ports:
-  #     - "5173:5173"
-  #   links:
-  #   - backend
-  # backend:
-  #   build:
-  #     context: ./backend
-  #   ports:
-  #     - "8000:8000"
-  #   links:
-  #     - hmmdb
-  #   depends_on:
-  #     jobstopdb:
-  #       condition: service_healthy
+  python_webhook:
+    build:
+      context: ./webhook
+    ports:
+      - "8000:8000"
+    depends_on:
+      saddb:
+        condition: service_healthy
   saddb:
     image: mysql:5.7
     ports:
