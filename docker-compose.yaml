@@ -1,9 +1,12 @@
+version: '3.8'
 services:
   python_webhook:
     build:
       context: ./webhook
     ports:
       - "80:3001"
+    volumes:
+      - ./webhook/private.pem:/app/private.pem:ro
     depends_on:
       saddb:
         condition: service_healthy
