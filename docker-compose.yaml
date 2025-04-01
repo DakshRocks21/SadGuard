@@ -10,8 +10,10 @@ services:
     depends_on:
       saddb:
         condition: service_healthy
+    env_file:
+      - .env
   saddb:
-    image: mysql:5.7
+    image: ${MYSQL_IMAGE:-mysql}
     ports:
       - "3313:3306"
     environment:
