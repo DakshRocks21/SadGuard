@@ -179,8 +179,9 @@ function RouteComponent() {
 
       {/* Main Content Area: Events, PRs & Commits */}
       <div className="bg-slate-100 dark:bg-zinc-950 flex-grow h-screen p-4 overflow-y-auto">
+        
         {/* New: PR Events Section */}
-        <div className="mb-8">
+        {/* <div className="mb-8">
           <h2 className="text-xl font-semibold dark:text-white mb-2">
             Pull Request Events {selectedRepo && `for ${selectedRepo}`}
           </h2>
@@ -221,7 +222,7 @@ function RouteComponent() {
               </TableBody>
             </Table>
           )}
-        </div>
+        </div> */}
 
         {/* Pull Requests Table */}
         <div className="mb-8">
