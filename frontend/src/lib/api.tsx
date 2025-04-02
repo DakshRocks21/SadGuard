@@ -64,7 +64,6 @@ export async function getPullRequests(repo: string) {
     });
 
     if (response.ok) {
-        console.log(response.json());
         return response.json();
     } else {
         console.log(response);
