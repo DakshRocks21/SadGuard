@@ -2,6 +2,8 @@
 from flask import Blueprint, request, jsonify, abort
 import requests
 from utils.db import Session, get_session, User
+from fastapi import APIRouter, Request, Depends, HTTPException
+from typing import Annotated
 
 SessionDep = Annotated[Session, Depends(get_session)]
 
