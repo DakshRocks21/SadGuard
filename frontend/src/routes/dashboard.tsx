@@ -266,7 +266,7 @@ function RouteComponent() {
         </div>
 
         {/* Commits Table */}
-        <div>
+        {/* <div>
           <h2 className="text-xl font-semibold dark:text-white mb-2">
             {selectedBranch ? `Commits for ${selectedBranch}` : "Commits"}
           </h2>
@@ -354,7 +354,8 @@ function RouteComponent() {
               </TableBody>
             </Table>
           )}
-        </div>
+        </div> */}
+
       </div>
     </div>
   );
