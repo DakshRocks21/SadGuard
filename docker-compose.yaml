@@ -14,6 +14,7 @@ services:
       - .env
   saddb:
     image: arm64v8/mysql
+    platform: linux/arm64
     ports:
       - "3313:3306"
     environment:
