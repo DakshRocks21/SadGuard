@@ -1,0 +1,29 @@
+version: '3.8'
+services:
+  python_webhook:
+    build:
+      context: ./webhook
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./webhook/private.pem:/app/private.pem:ro
+    depends_on:
+      saddb:
+        condition: service_healthy
+    env_file:
+      - .env
+  saddb:
+    image: arm64v8/mysql
+    platform: linux/arm64
+    ports:
+      - "3313:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: sad
+      MYSQL_USER: sad
+      MYSQL_PASSWORD: password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "--password=password", "--user=sad", "status"]
+      interval: 15s
+      timeout: 10s
+      retries: 10

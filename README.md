@@ -53,22 +53,56 @@ vulnerabilities that can have widespread consequences.
     Create a `.env` file in the root directory with the following variables:
 
     ```bash
+    GITHUB_CLIENT_ID=
+    GITHUB_CLIENT_SECRET=
     GITHUB_APP_ID=<Obtained from creating a GitHub bot>
     GITHUB_PRIVATE_KEY_PATH=<File path to the .pem file from the Github bot>
     GITHUB_WEBHOOK_SECRET=<User-defined secret at the bots configuration page>
     GOOGLE_AI_STUDIO_KEY=<Refer to the LLM configuration section>
     ```
 
+    Create a `.env` file in the frontend directory with the following variables:
+
+    ```bash
+    VITE_GITHUB_CLIENT_ID=<same as GITHUB_CLIENT_ID in root env>
+    ```
+
 3. Install dependencies and run SadGuard
+
+    database
+    ```bash
+    docker-compose up --build
+    ```
+    
+    frontend
+
+    ```bash
+    cd frontend
+    npm i
+    npm run dev
+    ```
+
+    backend
 
     ```bash
     python -m venv venv
     source venv/bin/activate
+    cd backend
     pip install -r requirements.txt
+    pip install pymysql
     python main.py
     ```
 
-## 2. Webhook Configuration
+## 2. Github Bot Configuration
+
+```bash
+# Callback URL
+http://localhost:5173/github/callback
+
+# Permissions required
+```
+
+## 3. Webhook Configuration
 
 1. Install Cloudflare Tunnel:
 
@@ -90,7 +124,7 @@ vulnerabilities that can have widespread consequences.
 
 3. Provide the generated URL to the GitHub bot settings page under "Webhook URL"
 
-## 3. LLM Configuration
+## 4. LLM Configuration
 
 1. Obtain an API Key from Google AI Studio at [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey).
 2. Add the key to your `.env` file

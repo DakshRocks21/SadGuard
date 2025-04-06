@@ -2,4 +2,4 @@ venv/
 private.pem
 .env
 __pycache__/
-*.json
+
