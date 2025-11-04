@@ -1,0 +1,34 @@
+FROM {{ base_image }}
+RUN apt-get update && apt-get install -y procps net-tools bash iptables curl
+RUN apt-get install tcpdump -y
+
+# Ensure non-interactive apt if using debian-based images
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONPATH="${PYTHONPATH}:/app"
+
+WORKDIR /app
+
+# Copy project files
+COPY . /app
+
+# Install dependencies
+{% if language == 'python' %}
+RUN {{ install_cmd }}
+RUN pip install pytest mitmproxy
+{% elif language == 'node' %}
+RUN {{ install_cmd }}
+{% else %}
+# Default: try Python install if requirements exist
+RUN {{ install_cmd }}
+{% endif %}
+
+{{ test_command }}
+
+
+RUN sed -i 's/\r$//' /app/.sadguard/wrapper.sh
+
+# Make wrapper executable
+RUN chmod +x /app/.sadguard/wrapper.sh
+
+# Default command runs the wrapper which runs tests and collects logs
+CMD ["/bin/bash", "/app/.sadguard/wrapper.sh"]

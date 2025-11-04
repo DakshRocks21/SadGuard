@@ -34,6 +34,36 @@ class PREvent(SQLModel, table=True):
     extra: dict = Field(sa_column=Column(JSON))
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
+
+class PRRun(SQLModel, table=True):
+    """Tracks a single sandbox run for a PR"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    repo_name: str = Field(index=True)
+    pr_number: int = Field(index=True)
+    run_status: str = Field(default="pending")
+    image_name: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    finished_at: Optional[datetime] = None
+    exit_code: Optional[int] = None
+    notes: Optional[str] = Field(default=None, sa_type=LONGTEXT)
+
+
+class AIReview(SQLModel, table=True):
+    """Stores iterative LLM reviews and metadata"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    pr_run_id: int = Field(index=True)
+    role: str = Field(default="assistant")
+    content: Optional[str] = Field(default=None, sa_type=LONGTEXT)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class LogChunk(SQLModel, table=True):
+    """Optional: store pointers to long logs or small chunks for auditing"""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    pr_run_id: int = Field(index=True)
+    chunk_index: int
+    content: Optional[str] = Field(default=None, sa_type=LONGTEXT)
+
 # MySQL database URL and engine setup.
 db_url = f"mysql+pymysql://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
 engine = create_engine(db_url)

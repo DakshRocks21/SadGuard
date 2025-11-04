@@ -1,6 +1,7 @@
 import os
 import dotenv
 import google.generativeai as genai
+from typing import List, Dict, Optional, Callable
 
 dotenv.load_dotenv()
 API_KEY = os.environ['GOOGLE_AI_STUDIO_KEY']
@@ -71,3 +72,74 @@ If anything is missing or unclear, DO NOT ASK for more information. Instead, jus
 
     response = model.generate_content(prompt)
     return response.text
+
+
+def orchestrate_review_loop(
+    pr_title: str,
+    pr_body: str,
+    diffs: List[Dict[str, str]],
+    run_results: Optional[str] = None,
+    analysis_results: Optional[str] = None,
+    max_iterations: int = 3,
+    store_callback: Optional[Callable[[int, str], None]] = None,
+) -> List[Dict[str, str]]:
+    """
+    Run an iterative LLM-driven review loop.
+
+    - diffs: list of {"filename": str, "diff": str}
+    - store_callback: optional function(iteration:int, content:str) to persist each LLM response
+
+    Returns a list of review dicts: [{"iteration": i, "content": str, "action_requested": bool}]
+    """
+    results = []
+    previous_reviews = []
+
+    for i in range(1, max_iterations + 1):
+        snippets = []
+        for d in diffs:
+            snippets.append(f"===== FILE: {d.get('filename')} =====\n{d.get('diff')}\n")
+
+        prompt_parts = [
+            "You are a VULNERABILITY and MALWARE DETECTION expert. Continue the iterative review based on the context provided.",
+            f"PR Title: {pr_title}",
+            f"PR Body: {pr_body}",
+        ]
+
+        if previous_reviews:
+            prompt_parts.append("Previous reviews:\n" + "\n---\n".join(previous_reviews))
+
+        prompt_parts.append("Code diffs:\n" + "\n".join(snippets))
+
+        if run_results:
+            prompt_parts.append("Sandbox run results:\n" + run_results)
+        if analysis_results:
+            prompt_parts.append("Analysis results:\n" + analysis_results)
+
+        prompt_parts.append(
+            "Provide a concise markdown review. If you recommend another sandbox run or additional static checks, explicitly say 'ACTION: re-run sandbox' or describe the next steps. Otherwise state 'ACTION: none'."
+        )
+
+        prompt = "\n\n".join(prompt_parts)
+        resp = model.generate_content(prompt)
+        text = resp.text
+
+        # store via callback if provided
+        if store_callback:
+            try:
+                store_callback(i, text)
+            except Exception:
+                pass
+
+        previous_reviews.append(text)
+
+        # Decide whether to continue based on presence of action keywords
+        lower = text.lower()
+        action_requested = any(k in lower for k in ("re-run sandbox", "re-run", "run again", "more tests", "reproduce", "further analysis", "investigate"))
+
+        results.append({"iteration": i, "content": text, "action_requested": str(action_requested)})
+        print(f"Iteration {i} complete. Action requested: {action_requested}")
+        if not action_requested:
+            print("No further action requested, ending review loop.")
+            break
+
+    return results

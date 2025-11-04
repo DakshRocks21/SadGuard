@@ -1,20 +1,20 @@
 version: '3.8'
 services:
-  python_webhook:
-    build:
-      context: ./webhook
-    ports:
-      - "3001:3001"
-    volumes:
-      - ./webhook/private.pem:/app/private.pem:ro
-    depends_on:
-      saddb:
-        condition: service_healthy
-    env_file:
-      - .env
+  # python_webhook:
+  #   build:
+  #     context: ./webhook
+  #   ports:
+  #     - "3001:3001"
+  #   volumes:
+  #     - ./webhook/private.pem:/app/private.pem:ro
+  #   depends_on:
+  #     saddb:
+  #       condition: service_healthy
+  #   env_file:
+  #     - .env
   saddb:
-    image: arm64v8/mysql
-    platform: linux/arm64
+    image: mysql:8.0
+    platform: linux/amd64
     ports:
       - "3313:3306"
     environment:

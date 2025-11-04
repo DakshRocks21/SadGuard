@@ -1,6 +1,7 @@
 
 from flask import Flask
 from utils.webhook import webhook_app
+from models import create_db_and_tables
 
 app = Flask(__name__)
 app.register_blueprint(webhook_app, url_prefix='/webhook')
@@ -12,6 +13,7 @@ def status():
 def run_webhook():
     app.run(host='0.0.0.0', port=3001)
 
+create_db_and_tables()
 run_webhook()
 
 # import threading

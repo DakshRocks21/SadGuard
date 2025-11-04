@@ -5,13 +5,16 @@ import hashlib
 import requests
 import tempfile
 import subprocess
+from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from flask import Blueprint, request, jsonify
 from github import GithubIntegration, Github
 from sqlmodel import Session
 from models import PREvent, engine  # also import your other models if needed
 from utils import container, checker, llm, analysis  # your utility modules
+from jinja2 import Environment, FileSystemLoader
+import json
 
 dotenv.load_dotenv()
 
@@ -49,8 +52,10 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
     pr_url = payload['pull_request']['url']
     pr_title = payload['pull_request']['title']
     pr_body = payload['pull_request']['body']
-    dockerfile_relative = os.path.join('.sadguard', 'Dockerfile')
+    dockerfile_relative = Path('.sadguard', 'Dockerfile').as_posix()
     image_name = 'sandbox-container'
+    progress_comment_marker = '<!-- sadguard-progress -->'
+    progress_comment_cached_id: Optional[int] = None
 
     # Example: leave a comment and log the event
     PRUtils.comment(
@@ -105,13 +110,71 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
             PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=error_msg)
             update_event(repo_name, "clone_error", pr_number, {"error": error_msg})
             return
+        print("Repository cloned to", temp_dir)
+        full_dockerfile_path = Path(temp_dir, dockerfile_relative).as_posix()
+        print("Using Dockerfile at", full_dockerfile_path)
+        # Detect project environment and dynamically generate .sadguard files if not present
+        sadguard_dir = Path(temp_dir, '.sadguard')
+        sadguard_dir.mkdir(parents=True, exist_ok=True)
 
-        full_dockerfile_path = os.path.join(temp_dir, dockerfile_relative)
+        # Simple environment detection
+        repo_files = {p.name for p in Path(temp_dir).glob('*')}
+        language = 'python'
+        install_cmd = "pip install -r requirements.txt"
+        test_command = "ENV DEFAULT_CMD=\"pytest -v tests/test_app.py\""
+        base_image = 'python:3.10-slim'
+
+        if (Path(temp_dir) / 'package.json').is_file():
+            language = 'node'
+            base_image = 'node:18-bullseye'
+            install_cmd = 'npm install'
+            # try to read package.json to get test script
+            try:
+                pkg = json.load(open(Path(temp_dir) / 'package.json'))
+                scripts = pkg.get('scripts', {})
+                test_command = scripts.get('test', 'npm test')
+            except Exception:
+                test_command = 'npm test'
+
+        elif (Path(temp_dir) / 'pyproject.toml').is_file() or (Path(temp_dir) / 'requirements.txt').is_file():
+            language = 'python'
+            base_image = 'python:3.10-slim'
+            install_cmd = 'pip install -r requirements.txt' if (Path(temp_dir) / 'requirements.txt').is_file() else 'pip install .'
+            # leave default pytest command
+
+        # If user provided .sadguard/Dockerfile in PR, prefer it
+        provided_dockerfile = Path(temp_dir, '.sadguard', 'Dockerfile')
+        provided_wrapper = Path(temp_dir, '.sadguard', 'wrapper.sh')
+
+        if not provided_dockerfile.is_file() or not provided_wrapper.is_file():
+            # Render templates from project templates directory
+            templates_path = Path(__file__).resolve().parents[1] / 'templates'
+            env = Environment(loader=FileSystemLoader(str(templates_path)))
+            docker_tpl = env.get_template('Dockerfile.j2')
+            wrapper_tpl = env.get_template('wrapper.sh.j2')
+
+            rendered_docker = docker_tpl.render(
+                language=language,
+                install_cmd=install_cmd,
+                base_image=base_image,
+                test_command=test_command,
+            )
+            rendered_wrapper = wrapper_tpl.render(
+                test_command=test_command
+            )
+
+            # Write generated files
+            provided_dockerfile.write_text(rendered_docker)
+            provided_wrapper.write_text(rendered_wrapper, encoding='utf-8')
+            # Ensure executable bit when building in container; wrapper script will chmod in Dockerfile too
+
+        assert Path(temp_dir, '.sadguard', 'Dockerfile').is_file()
+
         try:
             container.build_container(
                 image_name=image_name,
                 context_path=temp_dir,
-                dockerfile=full_dockerfile_path
+                dockerfile=dockerfile_relative
             )
         except Exception as e:
             error_msg = f"Error during container build: {e}"
@@ -119,8 +182,47 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
             update_event(repo_name, "build_error", pr_number, {"error": error_msg})
             return
 
+        # Run the container with streaming logs and stats. We'll stream incremental comments.
+        aggregated_logs = []
+        last_comment_time = datetime.utcnow()
+
+        def logs_callback(chunk: str):
+            # accumulate and occasionally post to PR
+            aggregated_logs.append(chunk)
+            nonlocal last_comment_time
+            now = datetime.utcnow()
+            # Post an incremental comment every ~10 seconds worth of logs
+            if (now - last_comment_time).total_seconds() > 10:
+                try:
+                    snippet = ''.join(aggregated_logs[-50:])
+                    comment_text = progress_comment_marker + "\n" + "```\n" + snippet + "\n```"
+                    PRUtils.upsert_progress_comment(repo_name=repo_name, pr_number=pr_number, body=comment_text, marker=progress_comment_marker)
+                except Exception:
+                    pass
+                last_comment_time = now
+
+        def stats_callback(stat: Dict[str, Any]):
+            # Optionally, post resource summary as a short status comment
+            try:
+                summary = f"CPU: {stat.get('cpu_percent'):.2f}% Mem: {stat.get('mem_usage')} / {stat.get('mem_limit')} Net RX/TX: {stat.get('net_rx')}/{stat.get('net_tx')}"
+            except Exception:
+                summary = str(stat)
+            # Post a short PR comment with stats (could be rate-limited)
+            now = datetime.utcnow()
+            if (now - last_comment_time).total_seconds() > 30:
+                try:
+                    comment_text = progress_comment_marker + "\n" + f"**Resource Stats:** {summary}"
+                    PRUtils.upsert_progress_comment(repo_name=repo_name, pr_number=pr_number, body=comment_text, marker=progress_comment_marker)
+                except Exception:
+                    pass
+
         try:
-            result = container.run_container(image_name=image_name, timeout=60)
+            result = container.run_container_streaming(
+                image_name=image_name,
+                timeout=300,
+                logs_callback=logs_callback,
+                stats_callback=stats_callback
+            )
         except Exception as e:
             error_msg = f"Error while running container: {e}"
             PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=error_msg)
@@ -222,3 +324,29 @@ class PRUtils:
         owner, repo = repo_name.split('/')
         installation_id = github_integration.get_installation(owner, repo).id
         return github_integration.get_access_token(installation_id).token
+
+    @staticmethod
+    def upsert_progress_comment(repo_name: str, pr_number: int, body: str, marker: str = '<!-- sadguard-progress -->') -> None:
+        """Create or update a single progress comment marked with `marker`.
+
+        If a comment containing the marker exists on the PR, edit it. Otherwise, create a new comment.
+        """
+        access_token = PRUtils._get_access_token(repo_name)
+        github = Github(access_token)
+        repo = github.get_repo(repo_name)
+        pull_request = repo.get_pull(pr_number)
+        try:
+            comments = pull_request.get_issue_comments()
+            for c in comments:
+                try:
+                    if marker in (c.body or ""):
+                        c.edit(body)
+                        return
+                except Exception:
+                    continue
+        except Exception:
+            # fallback: continue to create a comment
+            pass
+
+        # create new comment if none edited
+        pull_request.create_issue_comment(body)
