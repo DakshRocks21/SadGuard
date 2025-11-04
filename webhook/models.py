@@ -42,6 +42,9 @@ class PRRun(SQLModel, table=True):
     pr_number: int = Field(index=True)
     run_status: str = Field(default="pending")
     image_name: Optional[str] = None
+    progress_comment_id: Optional[int] = None
+    code_review_comment_id: Optional[int] = None
+    sandbox_review_comment_id: Optional[int] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     finished_at: Optional[datetime] = None
     exit_code: Optional[int] = None

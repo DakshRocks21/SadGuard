@@ -11,7 +11,7 @@ from typing import Dict, Any, List, Optional
 from flask import Blueprint, request, jsonify
 from github import GithubIntegration, Github
 from sqlmodel import Session
-from models import PREvent, engine  # also import your other models if needed
+from models import PREvent, engine, PRRun, AIReview  # also import your other models if needed
 from utils import container, checker, llm, analysis  # your utility modules
 from jinja2 import Environment, FileSystemLoader
 import json
@@ -69,6 +69,7 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
     is_wrapper_modified = False
 
     files = requests.get(f'{pr_url}/files').json()
+    diffs_list: List[Dict[str, str]] = []
     for file in files:
         if file['status'] != 'modified':
             continue
@@ -80,9 +81,13 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
             continue
         filename = file['filename']
         diff = file['patch']
-        review = llm.get_review(pr_title, pr_body, filename, diff)
-        formatted_review = f"# Review for `{filename}`\n{review}"
-        PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=formatted_review)
+        diffs_list.append({"filename": filename, "diff": diff})
+    # Keep old single-file review call for reference (commented out):
+    # review = llm.get_review(pr_title, pr_body, filename, diff)
+    # formatted_review = f"# Review for `{filename}`\n{review}"
+    # PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=formatted_review)
+
+    # We'll perform an iterative LLM review loop over all diffs below and post consolidated results.
     
     if is_dockerfile_modified and is_wrapper_modified:
         warning_message = ".sadguard/Dockerfile or .sadguard/wrapper.sh is modified."
@@ -140,7 +145,6 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
             language = 'python'
             base_image = 'python:3.10-slim'
             install_cmd = 'pip install -r requirements.txt' if (Path(temp_dir) / 'requirements.txt').is_file() else 'pip install .'
-            # leave default pytest command
 
         # If user provided .sadguard/Dockerfile in PR, prefer it
         provided_dockerfile = Path(temp_dir, '.sadguard', 'Dockerfile')
@@ -166,9 +170,76 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
             # Write generated files
             provided_dockerfile.write_text(rendered_docker)
             provided_wrapper.write_text(rendered_wrapper, encoding='utf-8')
-            # Ensure executable bit when building in container; wrapper script will chmod in Dockerfile too
 
         assert Path(temp_dir, '.sadguard', 'Dockerfile').is_file()
+
+        # Create a PRRun entry before build so we can attach metadata and persist progress_comment_id
+        pr_run = PRRun(repo_name=repo_name, pr_number=pr_number, run_status="building", image_name=image_name)
+        with Session(engine) as session:
+            session.add(pr_run)
+            session.commit()
+            session.refresh(pr_run)
+
+        # --- Perform iterative LLM review loop on code diffs before building/running sandbox ---
+        try:
+            code_questions = [
+                "Does the change introduce network connections to external hosts? If so, list probable destinations.",
+                "Does the diff introduce elevated permissions, use of privileged operations, or system calls that look suspicious?",
+                "Are the new or modified files performing filesystem, subprocess, or network operations that could be abused?",
+                "When analyzing tcpdump outputs, ignore promiscuous mode warnings or errors — focus on real flows and suspicious connections.",
+            ]
+
+            def _store_code_review(iteration: int, content: str):
+                try:
+                    with Session(engine) as session:
+                        ar = AIReview(pr_run_id=pr_run.id, role='assistant', content=content)
+                        session.add(ar)
+                        session.commit()
+                except Exception:
+                    pass
+
+            orchestration_code = llm.orchestrate_review_loop(
+                pr_title=pr_title,
+                pr_body=pr_body,
+                diffs=diffs_list,
+                run_results=None,
+                analysis_results=None,
+                questions=code_questions,
+                max_iterations=3,
+                store_callback=_store_code_review,
+            )
+
+            # Create a consolidated PR comment with all AI-generated data from the loop
+            try:
+                combined_parts = ["## Iterative LLM Code Review (SadGuard)\n"]
+                for item in orchestration_code:
+                    itr = item.get('iteration')
+                    content = item.get('content', '')
+                    combined_parts.append(f"### Iteration {itr}\n")
+                    combined_parts.append(content)
+                    combined_parts.append("\n---\n")
+                combined_comment = "\n".join(combined_parts)
+                # Upsert the consolidated code-review comment and persist its id on PRRun
+                try:
+                    with Session(engine) as session:
+                        comment_id = pr_run.code_review_comment_id
+                    created_id = PRUtils.upsert_progress_comment(repo_name=repo_name, pr_number=pr_number, body=combined_comment, marker=progress_comment_marker, comment_id=comment_id)
+                    if created_id and (pr_run.code_review_comment_id != created_id):
+                        with Session(engine) as session:
+                            pr_run.code_review_comment_id = created_id
+                            session.add(pr_run)
+                            session.commit()
+                except Exception:
+                    # fallback to create a normal comment
+                    try:
+                        PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=combined_comment)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        except Exception:
+            # If orchestration fails, continue to build/run sandbox
+            pass
 
         try:
             container.build_container(
@@ -180,6 +251,11 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
             error_msg = f"Error during container build: {e}"
             PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=error_msg)
             update_event(repo_name, "build_error", pr_number, {"error": error_msg})
+            with Session(engine) as session:
+                pr_run.run_status = "build_error"
+                pr_run.notes = error_msg
+                session.add(pr_run)
+                session.commit()
             return
 
         # Run the container with streaming logs and stats. We'll stream incremental comments.
@@ -195,8 +271,25 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
             if (now - last_comment_time).total_seconds() > 10:
                 try:
                     snippet = ''.join(aggregated_logs[-50:])
-                    comment_text = progress_comment_marker + "\n" + "```\n" + snippet + "\n```"
-                    PRUtils.upsert_progress_comment(repo_name=repo_name, pr_number=pr_number, body=comment_text, marker=progress_comment_marker)
+                    comment_text = (
+                        f"{progress_comment_marker}\n"
+                        "## SadGuard Sandbox Progress\n"
+                        "_Streaming logs below (truncated)_\n\n"
+                        "```\n"
+                        + snippet + "\n```")
+                    # Use stored comment id if available for reliable edits
+                    with Session(engine) as session:
+                        session.add(pr_run)
+                        session.commit()
+                        comment_id = pr_run.progress_comment_id
+
+                    created_id = PRUtils.upsert_progress_comment(repo_name=repo_name, pr_number=pr_number, body=comment_text, marker=progress_comment_marker, comment_id=comment_id)
+                    # persist comment id if newly created
+                    if created_id and (not pr_run.progress_comment_id):
+                        with Session(engine) as session:
+                            pr_run.progress_comment_id = created_id
+                            session.add(pr_run)
+                            session.commit()
                 except Exception:
                     pass
                 last_comment_time = now
@@ -207,12 +300,23 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
                 summary = f"CPU: {stat.get('cpu_percent'):.2f}% Mem: {stat.get('mem_usage')} / {stat.get('mem_limit')} Net RX/TX: {stat.get('net_rx')}/{stat.get('net_tx')}"
             except Exception:
                 summary = str(stat)
+            print(summary)
             # Post a short PR comment with stats (could be rate-limited)
             now = datetime.utcnow()
             if (now - last_comment_time).total_seconds() > 30:
                 try:
-                    comment_text = progress_comment_marker + "\n" + f"**Resource Stats:** {summary}"
-                    PRUtils.upsert_progress_comment(repo_name=repo_name, pr_number=pr_number, body=comment_text, marker=progress_comment_marker)
+                    comment_text = (
+                        f"{progress_comment_marker}\n"
+                        "## SadGuard Resource Stats\n"
+                        f"{stat}")
+                    with Session(engine) as session:
+                        comment_id = pr_run.progress_comment_id
+                    created_id = PRUtils.upsert_progress_comment(repo_name=repo_name, pr_number=pr_number, body=comment_text, marker=progress_comment_marker, comment_id=comment_id)
+                    if created_id and (not pr_run.progress_comment_id):
+                        with Session(engine) as session:
+                            pr_run.progress_comment_id = created_id
+                            session.add(pr_run)
+                            session.commit()
                 except Exception:
                     pass
 
@@ -243,32 +347,98 @@ def handle_pull_request(payload: Dict[str, Any]) -> None:
         mitm_review = llm.get_network_analysis_output(mitm_log) if is_mitm_valid else "Not enough Mitmproxy logs captured."
         tcpdump_review = llm.get_network_analysis_output(tcpdump_log) if is_tcpdump_valid else "No / Not enough Tcpdump logs captured."
 
-        comment_message = f"## Sandbox Analysis\nExit code: {exit_code}\n\n"
-        comment_message += (
-            "### Mitmproxy Analysis\n"
-            f"{mitm_review}\n"
-        )
-        comment_message += (
-            "### Tcpdump Analysis\n"
-            f"{tcpdump_review}\n"
-        )
-        comment_message += (
-            "## Complete Test Logs\n"
-            "### Unit Tests\n"
-            "```\n"
-            f"{code_output}\n"
-            "```\n"
-            "### Code Error\n"
-            "```\n"
-            f"{result_section}\n"
-            "```\n"
-        )
-        PRUtils.comment(
-            repo_name=repo_name,
-            pr_number=pr_number,
-            comment=comment_message
-        )
-        update_event(repo_name, "TESTS_COMPLETE", pr_number, {"result": result_section})
+        # Run the iterative LLM orchestrator with explicit questions and persist each AIReview
+        questions = [
+            "Does the change introduce network connections to external hosts? If so, list probable destinations.",
+            "Does the diff introduce any elevated permissions or privileged operations?",
+            "Are the provided tests sufficient to cover new functionality?",
+        ]
+
+        def _store_review(iteration: int, content: str):
+            print("Storing ", content)
+            try:
+                with Session(engine) as session:
+                    ar = AIReview(pr_run_id=pr_run.id, role='assistant', content=content)
+                    session.add(ar)
+                    session.commit()
+            except Exception:
+                pass
+
+        try:
+            orchestration = llm.orchestrate_review_loop(
+                pr_title=pr_title,
+                pr_body=pr_body,
+                diffs=diffs_list,
+                run_results=code_output,
+                analysis_results=(mitm_review + "\n\n" + tcpdump_review),
+                questions=questions,
+                max_iterations=3,
+                store_callback=_store_review,
+            )
+            print(orchestration)
+        except Exception:
+            orchestration = []
+
+        # mark PRRun finished
+        with Session(engine) as session:
+            pr_run.run_status = 'completed'
+            pr_run.exit_code = exit_code
+            pr_run.finished_at = datetime.utcnow()
+            session.add(pr_run)
+            session.commit()
+
+        # Build a consolidated AI-loop comment for the sandbox run (agentic review outputs)
+        try:
+            sandbox_parts = ["## Iterative LLM Sandbox Review (SadGuard)\n"]
+            for item in orchestration:
+                itr = item.get('iteration')
+                content = item.get('content', '')
+                sandbox_parts.append(f"### Iteration {itr}\n")
+                sandbox_parts.append(content)
+                sandbox_parts.append("\n---\n")
+            # Include the original structured analysis (kept commented for reviewers) below the AI outputs
+            sandbox_parts.append("\n<!-- Original Sandbox Analysis (kept for reference) -->\n")
+            sandbox_parts.append("## Sandbox Analysis\n")
+            sandbox_parts.append(f"Exit code: {exit_code}\n\n")
+            sandbox_parts.append("### Mitmproxy Analysis\n")
+            sandbox_parts.append(mitm_review + "\n")
+            sandbox_parts.append("### Tcpdump Analysis\n")
+            sandbox_parts.append(tcpdump_review + "\n")
+            sandbox_parts.append("## Complete Test Logs\n")
+            sandbox_parts.append("### Unit Tests\n```")
+            sandbox_parts.append(code_output + "\n```")
+            sandbox_parts.append("### Code Error\n```")
+            sandbox_parts.append(result_section + "\n```")
+
+            consolidated = "\n".join(sandbox_parts)
+            # Upsert the consolidated sandbox-review comment and persist its id on PRRun
+            try:
+                with Session(engine) as session:
+                    comment_id = pr_run.sandbox_review_comment_id
+                created_id = PRUtils.upsert_progress_comment(repo_name=repo_name, pr_number=pr_number, body=consolidated, marker=progress_comment_marker, comment_id=comment_id)
+                if created_id and (pr_run.sandbox_review_comment_id != created_id):
+                    with Session(engine) as session:
+                        pr_run.sandbox_review_comment_id = created_id
+                        session.add(pr_run)
+                        session.commit()
+            except Exception:
+                # fallback to simple comment
+                try:
+                    PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=consolidated)
+                except Exception:
+                    pass
+        except Exception:
+            # Fallback: post the original analysis comment (kept commented in code below)
+            # comment_message = f"## Sandbox Analysis\nExit code: {exit_code}\n\n" + ...
+            try:
+                comment_message = f"## Sandbox Analysis\nExit code: {exit_code}\n\n"\
+                    + ("### Mitmproxy Analysis\n" + mitm_review + "\n")\
+                    + ("### Tcpdump Analysis\n" + tcpdump_review + "\n")\
+                    + ("## Complete Test Logs\n" + "### Unit Tests\n" + "```\n" + code_output + "\n```\n" + "### Code Error\n" + "```\n" + result_section + "\n```\n")
+                # PRUtils.comment(repo_name=repo_name, pr_number=pr_number, comment=comment_message)
+                update_event(repo_name, "TESTS_COMPLETE", pr_number, {"result": result_section})
+            except Exception:
+                pass
 
 # Blueprint routes
 @webhook_app.route('/', methods=['POST'])
@@ -326,7 +496,7 @@ class PRUtils:
         return github_integration.get_access_token(installation_id).token
 
     @staticmethod
-    def upsert_progress_comment(repo_name: str, pr_number: int, body: str, marker: str = '<!-- sadguard-progress -->') -> None:
+    def upsert_progress_comment(repo_name: str, pr_number: int, body: str, marker: str = '<!-- sadguard-progress -->', comment_id: Optional[int] = None) -> Optional[int]:
         """Create or update a single progress comment marked with `marker`.
 
         If a comment containing the marker exists on the PR, edit it. Otherwise, create a new comment.
@@ -336,12 +506,23 @@ class PRUtils:
         repo = github.get_repo(repo_name)
         pull_request = repo.get_pull(pr_number)
         try:
+            # If we were provided a comment_id, try editing that exact comment first
+            if comment_id:
+                try:
+                    # Use get_issue_comment for issue/pr comments (PyGithub)
+                    c = repo.get_issue_comment(comment_id)
+                    c.edit(body)
+                    return c.id
+                except Exception:
+                    # fall through to search/create
+                    pass
+
             comments = pull_request.get_issue_comments()
             for c in comments:
                 try:
                     if marker in (c.body or ""):
                         c.edit(body)
-                        return
+                        return c.id
                 except Exception:
                     continue
         except Exception:
@@ -349,4 +530,8 @@ class PRUtils:
             pass
 
         # create new comment if none edited
-        pull_request.create_issue_comment(body)
+        created = pull_request.create_issue_comment(body)
+        try:
+            return created.id
+        except Exception:
+            return None

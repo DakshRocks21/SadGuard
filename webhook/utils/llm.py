@@ -80,6 +80,7 @@ def orchestrate_review_loop(
     diffs: List[Dict[str, str]],
     run_results: Optional[str] = None,
     analysis_results: Optional[str] = None,
+    questions: Optional[List[str]] = None,
     max_iterations: int = 3,
     store_callback: Optional[Callable[[int, str], None]] = None,
 ) -> List[Dict[str, str]]:
@@ -115,8 +116,13 @@ def orchestrate_review_loop(
         if analysis_results:
             prompt_parts.append("Analysis results:\n" + analysis_results)
 
+        # Add explicit agentic questions for the LLM to answer in each iteration
+        if questions:
+            qblock = "\n".join([f"Q{i+1}: {q}" for i, q in enumerate(questions)])
+            prompt_parts.append("Answer the following questions concisely and with recommended actions:\n" + qblock)
+
         prompt_parts.append(
-            "Provide a concise markdown review. If you recommend another sandbox run or additional static checks, explicitly say 'ACTION: re-run sandbox' or describe the next steps. Otherwise state 'ACTION: none'."
+            "Provide a concise markdown review. For each question above, include a short answer. At the END of your reply include a single line that starts with 'ACTION:' followed by one of the following tokens (lowercase): 're-run', 're-run-sandbox', 're-run-code', 'none', or 'escalate'. Example: ACTION: none\n\nIf you want another iteration, use 're-run' or the more specific 're-run-sandbox'/'re-run-code'. If no further iterations are needed, use 'ACTION: none'."
         )
 
         prompt = "\n\n".join(prompt_parts)
@@ -132,14 +138,22 @@ def orchestrate_review_loop(
 
         previous_reviews.append(text)
 
-        # Decide whether to continue based on presence of action keywords
-        lower = text.lower()
-        action_requested = any(k in lower for k in ("re-run sandbox", "re-run", "run again", "more tests", "reproduce", "further analysis", "investigate"))
+        # Parse explicit ACTION: line for deterministic control
+        import re
+        action = 'none'
+        m = re.search(r'(?m)^ACTION:\s*(.+)$', text)
+        if m:
+            action = m.group(1).strip().lower()
+        else:
+            # fallback: try to infer, but default to 'none' for safety
+            action = 'none'
 
-        results.append({"iteration": i, "content": text, "action_requested": str(action_requested)})
-        print(f"Iteration {i} complete. Action requested: {action_requested}")
-        if not action_requested:
-            print("No further action requested, ending review loop.")
+        results.append({"iteration": i, "content": text, "action": action})
+        print(f"Iteration {i} complete. ACTION: {action}")
+
+        # Continue only if ACTION indicates re-run
+        if action == 'none' or action == 'escalate':
+            print("No further automated iterations requested (ACTION: none or escalate). Ending review loop.")
             break
 
     return results

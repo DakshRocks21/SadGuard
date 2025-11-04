@@ -1,102 +1,209 @@
 import re
+import textwrap
+from typing import List, Optional, Tuple
+
 
 def extract_section(logs: str, section_title: str) -> str:
-    """
-    Extracts the content after a markdown header with the given title, up until the next header or end-of-file.
-    Expected log format example:
-    
+    """Extracts the content after a markdown header with the given title.
+
+    Example input (markdown-style):
+
     ## Mitmproxy Log (HTTP/HTTPS flows)
     <content to extract>
     ## Tcpdump Log (All network traffic)
-    
-    Returns:
-        str: The extracted content, or an empty string if the section was not found.
+
+    Returns the section text (trimmed) or an empty string if not found.
     """
-    # Match the header, optional whitespace, a newline, then capture until the next header line or end-of-string.
     pattern = re.compile(rf"## {re.escape(section_title)}\s*\n(.*?)(?=\n## |\Z)", re.DOTALL)
     match = pattern.search(logs)
     if match:
         return match.group(1).strip()
     return ""
 
-# logs = """
-# ## Code Output
-# ```
-# ============================= test session starts ==============================
-# platform linux -- Python 3.10.16, pytest-8.3.5, pluggy-1.5.0 -- /usr/local/bin/python3.10
-# cachedir: .pytest_cache
-# rootdir: /app
-# collecting ... collected 2 items
 
-# tests/test_app.py::test_create_note PASSED                               [ 50%]
-# tests/test_app.py::test_healthcheck PASSED                               [100%]
+### Reviewer-friendly helpers
 
-# ============================== 2 passed in 5.31s ===============================
-# ```
-# ---
-# ## Code Error
-# ```
-# ```
-# ---
-# ## Mitmproxy Log (HTTP/HTTPS flows)
-# ```
-# [13:33:19.834] Transparent Proxy listening at *:8080.
-# ```
-# ---
-# ## Tcpdump Log (All network traffic)
-# ```
-# tcpdump: data link type LINUX_SLL2
-# tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
-# listening on any, link-type LINUX_SLL2 (Linux cooked v2), snapshot length 262144 bytes
-# 13:33:19.578118 eth0  M   IP6 :: > ff02::16: HBH ICMP6, multicast listener report v2, 1 group record(s), length 28
-# 13:33:19.689406 eth0  Out ARP, Request who-has 172.17.0.1 tell 172.17.0.2, length 28
-# 13:33:19.689465 eth0  In  ARP, Reply 172.17.0.1 is-at 02:42:ea:4d:10:58, length 28
-# 13:33:19.689470 eth0  Out IP 172.17.0.2.42088 > 192.168.0.1.53: 11258+ A? attacker.com. (30)
-# 13:33:19.872136 eth0  M   IP6 :: > ff02::1:ffd4:b572: ICMP6, neighbor solicitation, who has fe80::fc8f:7fff:fed4:b572, length 32
-# 13:33:19.932645 eth0  In  IP 192.168.0.1.53 > 172.17.0.2.42088: 11258 1/0/0 A 209.196.146.115 (46)
-# 13:33:19.932853 eth0  Out IP 172.17.0.2.45778 > 209.196.146.115.31337: Flags [S], seq 3219741925, win 64240, options [mss 1460,sackOK,TS val 3449673290 ecr 0,nop,wscale 7], length 0
-# 13:33:20.248115 eth0  M   IP6 fe80::42:eaff:fe4d:1058 > ff02::16: HBH ICMP6, multicast listener report v2, 3 group record(s), length 68
-# 13:33:20.487735 eth0  M   IP 172.17.0.1.5353 > 224.0.0.251.5353: 0 PTR (QM)? _googlecast._tcp.local. (40)
-# 13:33:20.487936 eth0  M   IP 172.17.0.1.5353 > 224.0.0.251.5353: 0 PTR (QM)? _googlecast._tcp.local. (40)
-# 13:33:20.888276 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572 > ff02::16: HBH ICMP6, multicast listener report v2, 1 group record(s), length 28
-# 13:33:20.888290 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572 > ff02::2: ICMP6, router solicitation, length 16
-# 13:33:20.891161 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572 > ff02::16: HBH ICMP6, multicast listener report v2, 1 group record(s), length 28
-# 13:33:20.952074 eth0  Out IP 172.17.0.2.45778 > 209.196.146.115.31337: Flags [S], seq 3219741925, win 64240, options [mss 1460,sackOK,TS val 3449674310 ecr 0,nop,wscale 7], length 0
-# 13:33:20.989283 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0 [2q] PTR (QM)? _ipps._tcp.local. PTR (QM)? _ipp._tcp.local. (45)
-# 13:33:21.024133 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572 > ff02::16: HBH ICMP6, multicast listener report v2, 2 group record(s), length 48
-# 13:33:21.131342 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0 [2q] [2n] ANY (QM)? 2.7.5.b.4.d.e.f.f.f.f.7.f.8.c.f.0.0.0.0.0.0.0.0.0.0.0.0.0.8.e.f.ip6.arpa. ANY (QM)? linux.local. (149)
-# 13:33:21.152073 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572 > ff02::16: HBH ICMP6, multicast listener report v2, 1 group record(s), length 28
-# 13:33:21.382198 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0 [2q] [2n] ANY (QM)? 2.7.5.b.4.d.e.f.f.f.f.7.f.8.c.f.0.0.0.0.0.0.0.0.0.0.0.0.0.8.e.f.ip6.arpa. ANY (QM)? linux.local. (149)
-# 13:33:21.488385 eth0  M   IP 172.17.0.1.5353 > 224.0.0.251.5353: 0 PTR (QM)? _googlecast._tcp.local. (40)
-# 13:33:21.488590 eth0  M   IP 172.17.0.1.5353 > 224.0.0.251.5353: 0 PTR (QM)? _googlecast._tcp.local. (40)
-# 13:33:21.632953 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0 [2q] [2n] ANY (QM)? 2.7.5.b.4.d.e.f.f.f.f.7.f.8.c.f.0.0.0.0.0.0.0.0.0.0.0.0.0.8.e.f.ip6.arpa. ANY (QM)? linux.local. (149)
-# 13:33:21.833181 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0*- [0q] 2/0/0 (Cache flush) PTR linux.local., (Cache flush) AAAA fe80::fc8f:7fff:fed4:b572 (137)
-# 13:33:21.976069 eth0  Out IP 172.17.0.2.45778 > 209.196.146.115.31337: Flags [S], seq 3219741925, win 64240, options [mss 1460,sackOK,TS val 3449675334 ecr 0,nop,wscale 7], length 0
-# 13:33:21.990141 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0 [2q] PTR (QM)? _ipps._tcp.local. PTR (QM)? _ipp._tcp.local. (45)
-# 13:33:22.670695 eth0  B   IP 172.17.0.1.57621 > 172.17.255.255.57621: UDP, length 44
-# 13:33:22.892572 eth0  M   IP 172.17.0.1.43463 > 239.255.255.250.1900: UDP, length 168
-# 13:33:23.000071 eth0  Out IP 172.17.0.2.45778 > 209.196.146.115.31337: Flags [S], seq 3219741925, win 64240, options [mss 1460,sackOK,TS val 3449676358 ecr 0,nop,wscale 7], length 0
-# 13:33:23.028326 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0*- [0q] 2/0/0 (Cache flush) PTR linux.local., (Cache flush) AAAA fe80::fc8f:7fff:fed4:b572 (137)
-# 13:33:23.893859 eth0  M   IP 172.17.0.1.43463 > 239.255.255.250.1900: UDP, length 168
-# 13:33:23.992256 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572.5353 > ff02::fb.5353: 0 [2q] PTR (QM)? _ipps._tcp.local. PTR (QM)? _ipp._tcp.local. (45)
-# 13:33:24.024078 eth0  Out IP 172.17.0.2.45778 > 209.196.146.115.31337: Flags [S], seq 3219741925, win 64240, options [mss 1460,sackOK,TS val 3449677382 ecr 0,nop,wscale 7], length 0
-# 13:33:24.728088 eth0  M   IP6 fe80::fc8f:7fff:fed4:b572 > ff02::2: ICMP6, router solicitation, length 16
-# 13:33:24.895090 eth0  M   IP 172.17.0.1.43463 > 239.255.255.250.1900: UDP, length 168
 
-# 34 packets captured
-# 36 packets received by filter
-# 0 packets dropped by kernel
-# ```
-# ---
-# ## Network Difference (Initial vs Final)
-# ```
+def _first_nonempty_lines(text: str, max_lines: int) -> List[str]:
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    return lines[:max_lines]
 
-# ```
-# ---
-# """
 
-# print(extract_section(logs, "Code Output"))
-# print(extract_section(logs, "Code Error"))
-# print(extract_section(logs, "Mitmproxy Log (HTTP/HTTPS flows)"))
-# print(extract_section(logs, "Tcpdump Log (All network traffic)"))
-# print(extract_section(logs, "Network Difference (Initial vs Final)"))
+def extract_key_findings(logs: str, max_items: int = 5) -> List[str]:
+    """Return up to `max_items` log lines that look important (errors, warnings, tracebacks).
+
+    This uses simple heuristics to produce terse, unique findings a human reviewer can act on.
+    """
+    if not logs:
+        return []
+
+    keywords = [r"\bERROR\b", r"\bException\b", r"Traceback", r"\bfailed\b", r"permission denied", r"segfault", r"panic", r"timeout", r"connection refused", r"CRITICAL", r"WARNING"]
+    findings = []
+    for line in logs.splitlines():
+        low = line.lower()
+        if any(re.search(k, line, re.IGNORECASE) for k in keywords):
+            snippet = line.strip()
+            if snippet and snippet not in findings:
+                findings.append(snippet)
+                if len(findings) >= max_items:
+                    break
+
+    # If no keyword lines found, fallback to first non-empty lines (short view)
+    if not findings:
+        findings = _first_nonempty_lines(logs, max_items)
+
+    return findings
+
+
+def infer_severity(logs: str) -> str:
+    """Heuristically infer severity: High / Medium / Low.
+
+    High: errors, tracebacks, segfaults, panics
+    Medium: warnings, timeouts
+    Low: otherwise
+    """
+    if not logs:
+        return "Low"
+
+    high_kw = [r"\bERROR\b", r"Traceback", r"segfault", r"panic", r"CRITICAL", r"unhandled exception"]
+    medium_kw = [r"\bWARNING\b", r"timeout", r"connection refused", r"rate limit"]
+
+    for k in high_kw:
+        if re.search(k, logs, re.IGNORECASE):
+            return "High"
+    for k in medium_kw:
+        if re.search(k, logs, re.IGNORECASE):
+            return "Medium"
+    return "Low"
+
+
+def suggest_actions_from_findings(findings: List[str]) -> List[str]:
+    """Return short actionable suggestions derived from findings.
+
+    This maps common problem tokens to practical next steps a reviewer can follow.
+    """
+    suggestions = []
+    for f in findings:
+        lf = f.lower()
+        if "permission denied" in lf or "permissionerror" in lf:
+            suggestions.append("Check file and directory permissions and the user the container runs as.")
+        elif "timeout" in lf:
+            suggestions.append("Increase relevant timeouts or investigate network connectivity to external services.")
+        elif "connection refused" in lf or "failed to connect" in lf:
+            suggestions.append("Verify service endpoints and network access from inside the container.")
+        elif "traceback" in lf or "exception" in lf:
+            suggestions.append("Inspect the stack trace and attach the smallest failing repro if possible.")
+        elif "segfault" in lf or "panic" in lf:
+            suggestions.append("Consider running under a debugger or adding logging; check native deps and memory usage.")
+        elif "warning" in lf:
+            suggestions.append("Review the warning and determine if it can safely be ignored or needs fixing.")
+        elif "error" in lf or "failed" in lf:
+            suggestions.append("Re-run the failing step locally with verbose logging and capture full output for triage.")
+
+    # Deduplicate while preserving order and keep at most 5 suggestions
+    seen = set()
+    deduped = []
+    for s in suggestions:
+        if s not in seen:
+            seen.add(s)
+            deduped.append(s)
+        if len(deduped) >= 5:
+            break
+
+    # If no suggestions could be inferred, give a generic next step
+    if not deduped:
+        deduped.append("If unclear, re-run the failing command with increased logging and attach the output.")
+
+    return deduped
+
+
+def make_review_comment(title: str, findings_text: str, full_logs: Optional[str] = None, max_summary_lines: int = 3) -> str:
+    """Build a markdown comment string tailored for reviewers.
+
+    The output includes:
+    - A concise 3-4 line summary at the top (designed to be read in the PR conversation)
+    - Severity indicator
+    - Top findings as short bullets (unique, value-adding)
+    - Actionable suggestions
+    - A collapsible debug/details block that shows `full_logs` (or `findings_text` if full_logs is None)
+
+    Use this helper before posting to GitHub so the reviewer sees a compact summary with the ability
+    to expand and inspect raw debug output.
+    """
+    # Prepare short summary lines using heuristics
+    summary_lines = _first_nonempty_lines(findings_text or full_logs or "", max_summary_lines)
+    if not summary_lines:
+        # Fallback to taking first sentences
+        text_src = findings_text or full_logs or "No findings"
+        sentences = re.split(r"(?<=[.!?])\s+", text_src.strip())
+        summary_lines = [s.strip() for s in sentences if s][:max_summary_lines]
+
+    severity = infer_severity(findings_text or full_logs or "")
+    findings = extract_key_findings(findings_text or full_logs or "", max_items=5)
+    suggestions = suggest_actions_from_findings(findings)
+
+    # Build markdown
+    md_parts: List[str] = []
+    md_parts.append(f"### {title}")
+
+    # 3-4 line succinct summary
+    md_parts.append("")
+    md_parts.append("**Summary (top lines):**")
+    for l in summary_lines:
+        md_parts.append(f"> {l}")
+
+    md_parts.append("")
+    md_parts.append(f"**Severity:** **{severity}**")
+
+    if findings:
+        md_parts.append("")
+        md_parts.append("**Top findings:**")
+        for f in findings:
+            # Keep findings short
+            md_parts.append(f"- `{f}`")
+
+    if suggestions:
+        md_parts.append("")
+        md_parts.append("**Suggested next steps:**")
+        for s in suggestions:
+            md_parts.append(f"- {s}")
+
+    # Collapsible debug / full output
+    md_parts.append("")
+    debug_block = full_logs or findings_text or "(no debug output)"
+    # Trim very large debug payload but provide a note
+    max_debug_chars = 60_000
+    truncated = False
+    if len(debug_block) > max_debug_chars:
+        debug_block = debug_block[:max_debug_chars]
+        truncated = True
+
+    md_parts.append("<details>")
+    md_parts.append("<summary>Show debug output</summary>")
+    md_parts.append("")
+    md_parts.append("```text")
+    md_parts.append(debug_block.rstrip())
+    if truncated:
+        md_parts.append("\n...[truncated output]...")
+    md_parts.append("```")
+    md_parts.append("</details>")
+
+    # Small footer with provenance
+    md_parts.append("")
+    md_parts.append("*Generated by SadGuard automated analysis — provides a short summary and expandable debug output to aid human reviewers.*")
+
+    return textwrap.dedent("\n".join(md_parts)).strip()
+
+
+def build_consolidated_comment(title: str, sections: List[Tuple[str, str]], max_summary_lines: int = 3) -> str:
+    """Build a consolidated review comment containing multiple titled sections.
+
+    `sections` is a list of (section_title, section_text). Each section gets a short summary and collapsible debug.
+    """
+    parts: List[str] = []
+    parts.append(f"## {title}")
+    for sec_title, sec_text in sections:
+        parts.append("")
+        parts.append(make_review_comment(sec_title, sec_text, full_logs=sec_text, max_summary_lines=max_summary_lines))
+
+    return "\n\n".join(parts)
